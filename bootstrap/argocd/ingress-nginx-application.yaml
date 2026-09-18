@@ -16,6 +16,8 @@ spec:
     helm:
       values: |
         controller:
+          hostPort:
+            enabled: true
           service:
             type: LoadBalancer
 
