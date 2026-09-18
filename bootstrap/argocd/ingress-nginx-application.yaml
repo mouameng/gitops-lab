@@ -15,8 +15,10 @@ spec:
     helm:
       values: |
         controller:
-          service:
-            type: NodePort
+          hostPort:
+          enabled: true
+      service:
+        type: NodePort
 
   destination:
     server: https://kubernetes.default.svc
