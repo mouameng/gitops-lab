@@ -18,6 +18,7 @@ spec:
         controller:
           hostPort:
             enabled: true
+
           service:
             type: LoadBalancer
 
