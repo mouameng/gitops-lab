@@ -16,11 +16,8 @@ spec:
     helm:
       values: |
         controller:
-          hostPort:
-            enabled: true
-
           service:
-            type: NodePort
+            type: LoadBalancer
 
   destination:
     server: https://kubernetes.default.svc
