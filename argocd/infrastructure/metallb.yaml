@@ -1,21 +1,24 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: infrastructure
+  name: metallb
   namespace: argocd
 spec:
   project: infrastructure
 
   source:
-    repoURL: https://github.com/mouameng/gitops-lab.git
-    targetRevision: HEAD
-    path: argocd/infrastructure
+    repoURL: https://metallb.github.io/metallb
+    chart: metallb
+    targetRevision: 0.15.2
 
   destination:
     name: workload-dev
-    namespace: argocd
+    namespace: metallb-system
 
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+
+    syncOptions:
+      - CreateNamespace=true

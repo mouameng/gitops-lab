@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: applications
+  name: whoami
   namespace: argocd
 spec:
   project: applications
@@ -9,13 +9,16 @@ spec:
   source:
     repoURL: https://github.com/mouameng/gitops-lab.git
     targetRevision: HEAD
-    path: argocd/workloads
+    path: applications/whoami
 
   destination:
     name: workload-dev
-    namespace: argocd
+    namespace: whoami
 
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+
+    syncOptions:
+      - CreateNamespace=true
