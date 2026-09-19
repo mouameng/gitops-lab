@@ -11,7 +11,7 @@ spec:
     - https://github.com/mouameng/gitops-lab.git
     - https://kubernetes.github.io/ingress-nginx
     - https://metallb.github.io/metallb
-    - https://bitnami-labs.github.io/sealed-secrets
+    - https://bitnami.github.io/sealed-secrets
   destinations:
     - name: workload-dev
       namespace: '*'
