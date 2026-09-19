@@ -12,7 +12,7 @@ spec:
     path: argocd/infrastructure
 
   destination:
-    name: workload-dev
+    server: https://kubernetes.default.svc
     namespace: argocd
 
   syncPolicy:
