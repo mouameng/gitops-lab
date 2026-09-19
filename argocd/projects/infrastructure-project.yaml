@@ -12,6 +12,7 @@ spec:
     - https://kubernetes.github.io/ingress-nginx
     - https://metallb.github.io/metallb
     - https://bitnami.github.io/sealed-secrets
+    - https://charts.jetstack.io
   destinations:
     - name: workload-dev
       namespace: '*'
