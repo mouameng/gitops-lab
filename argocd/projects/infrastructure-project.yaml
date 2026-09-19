@@ -3,20 +3,23 @@ kind: AppProject
 metadata:
   name: infrastructure
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
 spec:
-  description: Infrastructure components
-
+  description: Composants d'infrastructure des clusters geres
   sourceRepos:
-    - '*'
-
+    - https://github.com/mouameng/gitops-lab.git
+    - https://kubernetes.github.io/ingress-nginx
+    - https://metallb.github.io/metallb
+    - https://bitnami-labs.github.io/sealed-secrets
   destinations:
-    - namespace: '*'
-      server: '*'
-
+    - name: workload-dev
+      namespace: '*'
+    - server: https://kubernetes.default.svc
+      namespace: '*'
   clusterResourceWhitelist:
     - group: '*'
       kind: '*'
-
   namespaceResourceWhitelist:
     - group: '*'
       kind: '*'

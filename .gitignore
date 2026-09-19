@@ -1,2 +1,4 @@
-# Cluster registrations
-*-cluster-secret.yaml
+# Secret genere localement avant chiffrement
+*-secret.yaml
+# La cle privee Sealed Secrets ne doit jamais entrer dans Git
+sealed-secrets-key.yaml

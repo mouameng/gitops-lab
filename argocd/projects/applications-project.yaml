@@ -3,20 +3,18 @@ kind: AppProject
 metadata:
   name: applications
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
 spec:
-  description: Application workloads
-
+  description: Workloads applicatifs
   sourceRepos:
-    - '*'
-
+    - https://github.com/mouameng/gitops-lab.git
   destinations:
-    - namespace: '*'
-      server: '*'
-
+    - name: workload-dev
+      namespace: '*'
   clusterResourceWhitelist:
     - group: ''
       kind: Namespace
-
   namespaceResourceWhitelist:
     - group: '*'
       kind: '*'
