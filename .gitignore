@@ -2,3 +2,6 @@
 *-secret.yaml
 # La cle privee Sealed Secrets ne doit jamais entrer dans Git
 sealed-secrets-key.yaml
+# kubeseal pour le script de generation de secret
+kubeseal*
+LICENSE
