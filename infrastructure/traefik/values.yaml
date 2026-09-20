@@ -1,0 +1,6 @@
+service:
+  type: ClusterIP
+
+ingressRoute:
+  dashboard:
+    enabled: true
