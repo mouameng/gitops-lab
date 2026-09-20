@@ -89,11 +89,27 @@ kubectl apply \
   -f clusters/management/root-app/root-app.yaml
 
 #
-# Attente synchronisation initiale
+# Attente configuration ArgoCD externe
 #
 echo "[INFO] attente création applications"
-
 sleep 15
+
+echo "[INFO] attente configuration argocd-external"
+
+kubectl wait \
+  --for=jsonpath='{.data.server\.insecure}'=true \
+  configmap/argocd-cmd-params-cm \
+  -n argocd \
+  --timeout=300s || true
+
+echo "[INFO] redémarrage argocd-server"
+
+kubectl rollout restart deployment/argocd-server \
+  -n argocd
+
+kubectl rollout status deployment/argocd-server \
+  -n argocd \
+  --timeout=300s
 
 #
 # Contrôles
