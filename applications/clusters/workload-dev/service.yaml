@@ -7,7 +7,11 @@ metadata:
 
 spec:
   type: ExternalName
-  externalName: 172.18.255.200
+  externalName: ingress.workload-dev.lab.local
+
   ports:
     - name: http
       port: 80
+
+    - name: https
+      port: 443
