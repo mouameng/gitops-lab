@@ -19,7 +19,7 @@ spec:
     helm:
       values: |
         service:
-          type: LoadBalancer
+          type: NodePort
 
         ingressRoute:
           dashboard:
