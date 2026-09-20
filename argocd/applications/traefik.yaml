@@ -15,15 +15,25 @@ spec:
     repoURL: https://traefik.github.io/charts
     chart: traefik
     targetRevision: 37.1.0
-  
+    
     helm:
       values: |
         service:
-          type: NodePort
+          enabled: true
+          type: ClusterIP
 
         ingressRoute:
           dashboard:
             enabled: true
+
+        ports:
+          web:
+            port: 8000
+            hostPort: 80
+
+        websecure:
+          port: 8443
+          hostPort: 443
 
   destination:
     server: https://kubernetes.default.svc
