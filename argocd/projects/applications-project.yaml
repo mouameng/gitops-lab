@@ -7,14 +7,21 @@ metadata:
     argocd.argoproj.io/sync-wave: "-50"
 spec:
   description: Workloads applicatifs
+
   sourceRepos:
     - https://github.com/mouameng/gitops-lab.git
+
   destinations:
     - name: workload-dev
       namespace: '*'
+
+    - server: https://kubernetes.default.svc
+      namespace: traefik
+
   clusterResourceWhitelist:
     - group: ''
       kind: Namespace
+
   namespaceResourceWhitelist:
     - group: '*'
       kind: '*'
