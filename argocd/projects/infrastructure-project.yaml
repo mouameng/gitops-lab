@@ -13,6 +13,7 @@ spec:
     - https://metallb.github.io/metallb
     - https://bitnami.github.io/sealed-secrets
     - https://charts.jetstack.io
+    - https://traefik.github.io/charts
   destinations:
     - name: workload-dev
       namespace: '*'
