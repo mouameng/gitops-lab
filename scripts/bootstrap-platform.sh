@@ -49,7 +49,7 @@ echo "[5/5] Bootstrap workload-dev"
 
 echo
 echo "[6/6] Publication GitOps"
-./scripts/gitops-sync.sh
+./scripts/bootstrap-gitops-sync.sh
 
 # Attendre l'enregistrement du cluster workload-dev dans ArgoCD
 # avant de poursuivre le bootstrap GitOps.
