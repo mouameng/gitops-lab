@@ -1,0 +1,19 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+
+metadata:
+  name: workload-dev
+  namespace: traefik
+
+spec:
+  entryPoints:
+    - web
+
+  routes:
+    - match: HostRegexp(`^.+\.dev\.local$`)
+      kind: Rule
+
+      services:
+        - name: workload-dev
+          port: 80
+          passHostHeader: true
