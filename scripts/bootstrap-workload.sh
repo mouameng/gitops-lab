@@ -10,7 +10,7 @@ ARGOCD_NAMESPACE="argocd"
 SA_NAMESPACE="kube-system"
 SA_NAME="argocd-manager"
 
-OUTPUT="argocd/cluster-registration/workload-dev-sealedsecret.yaml"
+OUTPUT="clusters/management/cluster-registration/workload-dev-sealedsecret.yaml"
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT

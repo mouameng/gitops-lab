@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+
+metadata:
+  name: cluster-registration
+  namespace: argocd
+
+  annotations:
+    argocd.argoproj.io/sync-wave: "100"
+
+spec:
+  project: infrastructure
+
+  source:
+    repoURL: https://github.com/mouameng/gitops-lab.git
+    targetRevision: main
+    path: clusters/management/cluster-registration
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
