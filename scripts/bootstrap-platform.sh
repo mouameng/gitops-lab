@@ -48,6 +48,19 @@ echo "[5/5] Bootstrap workload-dev"
 "${ROOT_DIR}/scripts/bootstrap-workload.sh"
 
 echo
+echo "[6/6] Publication GitOps"
+./scripts/gitops-sync.sh
+
+# Attendre l'enregistrement du cluster workload-dev dans ArgoCD
+# avant de poursuivre le bootstrap GitOps.
+kubectl --context kind-gitops-management \
+  wait \
+  --for=jsonpath='{.status.health.status}'=Healthy \
+  application/cluster-registration \
+  -n argocd \
+  --timeout=300s
+
+echo
 echo "=================================================="
 echo "Bootstrap terminé"
 echo "=================================================="
