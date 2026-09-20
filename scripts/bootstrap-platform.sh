@@ -51,8 +51,8 @@ echo
 echo "[6/6] Publication GitOps"
 ./scripts/bootstrap-gitops-sync.sh
 
-# Attendre l'enregistrement du cluster workload-dev dans ArgoCD
-# avant de poursuivre le bootstrap GitOps.
+echo "Attendre l'enregistrement du cluster workload-dev dans ArgoCD"
+echo "avant de poursuivre le bootstrap GitOps."
 kubectl --context kind-gitops-management \
   wait \
   --for=jsonpath='{.status.health.status}'=Healthy \
