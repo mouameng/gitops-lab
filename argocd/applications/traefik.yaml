@@ -19,7 +19,7 @@ spec:
     helm:
       values: |
         service:
-          type: ClusterIP
+          type: LoadBalancer
 
         ingressRoute:
           dashboard:
