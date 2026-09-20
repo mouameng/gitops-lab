@@ -31,9 +31,9 @@ spec:
             port: 8000
             hostPort: 80
 
-        websecure:
-          port: 8443
-          hostPort: 443
+          websecure:
+            port: 8443
+            hostPort: 443
 
   destination:
     server: https://kubernetes.default.svc
