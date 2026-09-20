@@ -26,6 +26,10 @@ spec:
           dashboard:
             enabled: true
 
+        providers:
+          kubernetesCRD:
+            allowExternalNameServices: true
+
         ports:
           web:
             port: 8000
