@@ -2,43 +2,110 @@
 
 set -euo pipefail
 
-CONTEXT="kind-gitops-management"
-ARGOCD_VERSION="v3.1.7"
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ROOT_APP="${ROOT_DIR}/clusters/management/root-app/root-app.yaml"
-SEALED_KEYS="${SEALED_KEYS:-$HOME/.config/gitops-lab/sealed-secrets-key.yaml}"
+CLUSTER_NAME="gitops-management"
+ARGOCD_NAMESPACE="argocd"
 
-kubectl --context "$CONTEXT" \
-  create namespace argocd \
-  --dry-run=client \
-  -o yaml | kubectl --context "$CONTEXT" apply -f -
+echo "==================================="
+echo " Bootstrap cluster management"
+echo "==================================="
 
-kubectl --context "$CONTEXT" apply \
-  --server-side \
-  -n argocd \
-  -f "https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml"
+#
+# Vérifications préalables
+#
+for cmd in kubectl helm git; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "ERREUR: commande absente: $cmd"
+    exit 1
+  fi
+done
 
-kubectl --context "$CONTEXT" \
-  -n argocd \
-  wait \
-  --for=condition=Established \
-  crd/applications.argoproj.io \
-  --timeout=180s
+echo "[OK] outils présents"
 
-kubectl --context "$CONTEXT" \
-  -n argocd \
-  rollout status deployment/argocd-server \
-  --timeout=300s
+#
+# Vérification contexte
+#
+CURRENT_CONTEXT=$(kubectl config current-context)
 
-if [ -f "$SEALED_KEYS" ]; then
-    echo "[INFO] Restauration clé privée Sealed Secrets"
-    kubectl --context "$CONTEXT" apply -f "$SEALED_KEYS"
+if [[ "$CURRENT_CONTEXT" != "kind-${CLUSTER_NAME}" ]]; then
+  echo "ERREUR:"
+  echo "Contexte attendu : kind-${CLUSTER_NAME}"
+  echo "Contexte actuel  : $CURRENT_CONTEXT"
+  exit 1
 fi
 
-kubectl --context "$CONTEXT" apply -f "$ROOT_APP"
+echo "[OK] contexte kubectl valide"
+
+#
+# Namespace ArgoCD
+#
+kubectl create namespace argocd \
+  --dry-run=client -o yaml \
+  | kubectl apply -f -
+
+#
+# Installation ArgoCD
+#
+if ! kubectl get deployment argocd-server \
+  -n argocd >/dev/null 2>&1; then
+
+  echo "[INFO] installation ArgoCD"
+
+  kubectl apply \
+    --server-side \
+    -n argocd \
+    -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+else
+
+  echo "[INFO] ArgoCD déjà installé"
+
+fi
+
+#
+# Attente pods ArgoCD
+#
+echo "[INFO] attente ArgoCD"
+
+kubectl wait \
+  --for=condition=available \
+  deployment/argocd-server \
+  -n argocd \
+  --timeout=300s
+
+kubectl wait \
+  --for=condition=available \
+  deployment/argocd-repo-server \
+  -n argocd \
+  --timeout=300s
+
+echo "[OK] ArgoCD disponible"
+
+#
+# Root App
+#
+echo "[INFO] application Root App"
+
+kubectl apply \
+  -f clusters/management/root-app/root-app.yaml
+
+#
+# Attente synchronisation initiale
+#
+echo "[INFO] attente création applications"
+
+sleep 15
+
+#
+# Contrôles
+#
+kubectl get applications -n argocd || true
 
 echo
-echo "[OK] Bootstrap management lancé"
+echo "[INFO] Résumé"
+echo "-----------------------------------"
+kubectl get appprojects -n argocd
 echo
-echo "Contrôle :"
-echo "kubectl --context $CONTEXT get applications -n argocd"
+kubectl get applications -n argocd
+echo
+
+echo "[OK] bootstrap-management terminé"
