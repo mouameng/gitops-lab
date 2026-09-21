@@ -14,6 +14,7 @@ spec:
     - https://bitnami.github.io/sealed-secrets
     - https://charts.jetstack.io
     - https://traefik.github.io/charts
+    - https://kubernetes-sigs.github.io/metrics-server/
   destinations:
     - name: workload-dev
       namespace: '*'
