@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: metallb-config-prod
+  namespace: argocd
+spec:
+  project: infrastructure
+
+  source:
+    repoURL: https://github.com/mouameng/gitops-lab.git
+    targetRevision: HEAD
+    path: infrastructure/metallb/overlays/prod
+
+  destination:
+    name: workload-prod
+    namespace: metallb-system
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
