@@ -1,0 +1,19 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+
+metadata:
+  name: workload-prod
+  namespace: traefik
+
+spec:
+  entryPoints:
+    - web
+
+  routes:
+    - match: HostRegexp(`^.+\.prod\.local$`)
+      kind: Rule
+
+      services:
+        - name: workload-prod
+          port: 80
+          passHostHeader: true
