@@ -19,6 +19,8 @@ spec:
 
           service:
             type: LoadBalancer
+            annotations:
+              metallb.io/loadBalancerIPs: "172.18.250.200"
 
   destination:
     name: workload-dev
