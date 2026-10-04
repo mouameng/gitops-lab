@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/mouameng/gitops-lab.git
     targetRevision: HEAD
-    path: applications/whoami
+    path: applications/whoami/overlays/dev
 
   destination:
     name: workload-dev
