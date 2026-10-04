@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/mouameng/gitops-lab.git
     targetRevision: HEAD
-    path: infrastructure/metallb
+    path: infrastructure/metallb/overlays/dev
 
   destination:
     name: workload-dev
