@@ -18,6 +18,8 @@ spec:
   destinations:
     - name: workload-dev
       namespace: '*'
+    - name: workload-prod
+      namespace: '*'
     - server: https://kubernetes.default.svc
       namespace: '*'
   clusterResourceWhitelist:
