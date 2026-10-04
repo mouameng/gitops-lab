@@ -2,16 +2,46 @@
 
 set -euo pipefail
 
-MGMT_CONTEXT="kind-gitops-management"
-WORKLOAD_CONTEXT="kind-gitops-lab"
+MGMT_CONTEXT="${MGMT_CONTEXT:?Definir MGMT_CONTEXT explicitement}"
+KIND_CLUSTER="${KIND_CLUSTER:?Définir KIND_CLUSTER explicitement}"
+ARGOCD_CLUSTER="${ARGOCD_CLUSTER:?Définir ARGOCD_CLUSTER explicitement}"
+WORKLOAD_CONTEXT="kind-${KIND_CLUSTER}"
 
 ARGOCD_NAMESPACE="argocd"
 
 SA_NAMESPACE="kube-system"
 SA_NAME="argocd-manager"
 
-OUTPUT="clusters/management/cluster-registration/workload-dev-sealedsecret.yaml"
+OUTPUT="${OUTPUT:?Definir OUTPUT explicitement}"
 
+# Vérifier le couple dans l'inventaire avant toute action Kubernetes.
+INVENTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/clusters/workloads.tsv"
+if [[ ! -f "$INVENTORY" ]] ||
+   ! awk -F '\t' -v kind="$KIND_CLUSTER" -v argo="$ARGOCD_CLUSTER" '
+     NR > 1 && $2 == kind && $3 == argo { found = 1 }
+     END { exit !found }
+   ' "$INVENTORY"; then
+  echo "[ERROR] Correspondance absente de $INVENTORY" >&2
+  exit 1
+fi
+
+CANDIDATE_DIR="${HOME}/.config/gitops-lab/registration-candidates"
+EXPECTED_OUTPUT="${CANDIDATE_DIR}/${ARGOCD_CLUSTER}-sealedsecret.yaml"
+[[ -d "$CANDIDATE_DIR" && "$OUTPUT" == "$EXPECTED_OUTPUT" ]] || {
+  echo "[STOP] OUTPUT doit designer le candidat hors Git attendu" >&2
+  exit 1
+}
+[[ ! -L "$OUTPUT" ]] || {
+  echo "[STOP] OUTPUT ne doit pas etre un lien symbolique" >&2
+  exit 1
+}
+
+if [[ -e "$OUTPUT" ]]; then
+  echo "[ERROR] Fichier existant, écrasement interdit : $OUTPUT" >&2
+  exit 1
+fi
+
+umask 077
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -89,7 +119,7 @@ kubectl \
   -o jsonpath='{.clusters[0].cluster.certificate-authority-data}'
 )"
 
-SERVER="https://gitops-lab-control-plane:6443"
+SERVER="https://${KIND_CLUSTER}-control-plane:6443"
 
 CONFIG="$(
 printf \
@@ -104,8 +134,8 @@ echo "[3/5] Génération Secret Cluster ArgoCD"
 kubectl \
   --context "$MGMT_CONTEXT" \
   -n "$ARGOCD_NAMESPACE" \
-  create secret generic workload-dev \
-  --from-literal=name=workload-dev \
+  create secret generic "$ARGOCD_CLUSTER" \
+  --from-literal=name="$ARGOCD_CLUSTER" \
   --from-literal=server="$SERVER" \
   --from-literal=config="$CONFIG" \
   --dry-run=client -o yaml \
@@ -120,14 +150,14 @@ kubectl \
       -f - \
       argocd.argoproj.io/secret-type=cluster \
       -o yaml \
-      > "$TMPDIR/workload-dev-secret.yaml"
+      > "$TMPDIR/${ARGOCD_CLUSTER}-secret.yaml"
 
 echo
 echo "[4/5] Vérification label cluster"
 
 grep \
   "argocd.argoproj.io/secret-type: cluster" \
-  "$TMPDIR/workload-dev-secret.yaml"
+  "$TMPDIR/${ARGOCD_CLUSTER}-secret.yaml"
 
 echo
 echo "[5/5] Génération SealedSecret"
@@ -137,14 +167,10 @@ kubeseal \
   --controller-name sealed-secrets-controller \
   --controller-namespace sealed-secrets \
   --format yaml \
-  < "$TMPDIR/workload-dev-secret.yaml" \
+  < "$TMPDIR/${ARGOCD_CLUSTER}-secret.yaml" \
   > "$OUTPUT"
 
 echo
 echo "[OK] Généré : $OUTPUT"
 echo
-echo "Ne pas oublier :"
-echo
-echo "git add $OUTPUT"
-echo "git commit"
-echo "git push"
+echo "Fichier candidat généré ; validation et activation à traiter par le PRA."

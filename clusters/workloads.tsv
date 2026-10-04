@@ -1,0 +1,3 @@
+environment	kind_cluster	argocd_cluster
+dev	gitops-dev	workload-dev
+prod	gitops-prod	workload-prod

@@ -2,8 +2,21 @@
 
 set -euo pipefail
 
-CLUSTER_NAME="gitops-management"
+CLUSTER_NAME="${CLUSTER_NAME:?Définir CLUSTER_NAME explicitement}"
 ARGOCD_NAMESPACE="argocd"
+ARGOCD_MANIFEST="${ARGOCD_MANIFEST:?Définir ARGOCD_MANIFEST explicitement}"
+EXPECTED_SHA256="7efe2d6bbc03f63623640f1e4198f16c84009d510fb810ef71e56df1b7614ba9"
+
+[[ -f "$ARGOCD_MANIFEST" && -r "$ARGOCD_MANIFEST" ]] || {
+  echo "[STOP] Manifeste Argo CD absent ou illisible" >&2
+  exit 1
+}
+ACTUAL_SHA256="$(sha256sum "$ARGOCD_MANIFEST" | cut -d ' ' -f 1)"
+[[ "$ACTUAL_SHA256" == "$EXPECTED_SHA256" ]] || {
+  echo "[STOP] Empreinte du manifeste Argo CD inattendue" >&2
+  exit 1
+}
+echo "[OK] Manifeste Argo CD v3.5.3 vérifié"
 
 echo "==================================="
 echo " Bootstrap cluster management"
@@ -24,36 +37,27 @@ echo "[OK] outils présents"
 #
 # Vérification contexte
 #
-CURRENT_CONTEXT=$(kubectl config current-context)
-
-if [[ "$CURRENT_CONTEXT" != "kind-${CLUSTER_NAME}" ]]; then
-  echo "ERREUR:"
-  echo "Contexte attendu : kind-${CLUSTER_NAME}"
-  echo "Contexte actuel  : $CURRENT_CONTEXT"
-  exit 1
-fi
-
-echo "[OK] contexte kubectl valide"
+MGMT_CONTEXT="kind-${CLUSTER_NAME}"
 
 #
 # Namespace ArgoCD
 #
-kubectl create namespace argocd \
+kubectl --context "$MGMT_CONTEXT" create namespace argocd \
   --dry-run=client -o yaml \
-  | kubectl apply -f -
+  | kubectl --context "$MGMT_CONTEXT" apply -f -
 
 #
 # Installation ArgoCD
 #
-if ! kubectl get deployment argocd-server \
+if ! kubectl --context "$MGMT_CONTEXT" get deployment argocd-server \
   -n argocd >/dev/null 2>&1; then
 
   echo "[INFO] installation ArgoCD"
 
-  kubectl apply \
+  kubectl --context "$MGMT_CONTEXT" apply \
     --server-side \
     -n argocd \
-    -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    -f "$ARGOCD_MANIFEST"
 
 else
 
@@ -66,13 +70,13 @@ fi
 #
 echo "[INFO] attente ArgoCD"
 
-kubectl wait \
+kubectl --context "$MGMT_CONTEXT" wait \
   --for=condition=available \
   deployment/argocd-server \
   -n argocd \
   --timeout=300s
 
-kubectl wait \
+kubectl --context "$MGMT_CONTEXT" wait \
   --for=condition=available \
   deployment/argocd-repo-server \
   -n argocd \
@@ -80,48 +84,4 @@ kubectl wait \
 
 echo "[OK] ArgoCD disponible"
 
-#
-# Root App
-#
-echo "[INFO] application Root App"
-
-kubectl apply \
-  -f clusters/management/root-app/root-app.yaml
-
-#
-# Attente configuration ArgoCD externe
-#
-echo "[INFO] attente création applications"
-sleep 15
-
-echo "[INFO] attente configuration argocd-external"
-
-kubectl wait \
-  --for=jsonpath='{.data.server\.insecure}'=true \
-  configmap/argocd-cmd-params-cm \
-  -n argocd \
-  --timeout=300s || true
-
-echo "[INFO] redémarrage argocd-server"
-
-kubectl rollout restart deployment/argocd-server \
-  -n argocd
-
-kubectl rollout status deployment/argocd-server \
-  -n argocd \
-  --timeout=300s
-
-#
-# Contrôles
-#
-kubectl get applications -n argocd || true
-
-echo
-echo "[INFO] Résumé"
-echo "-----------------------------------"
-kubectl get appprojects -n argocd
-echo
-kubectl get applications -n argocd
-echo
-
-echo "[OK] bootstrap-management terminé"
+echo "[OK] Argo CD disponible ; Root App non appliquée par ce script"
