@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 CLUSTER_NAME="${CLUSTER_NAME:?Définir CLUSTER_NAME explicitement}"
 ARGOCD_NAMESPACE="argocd"
@@ -49,11 +50,12 @@ kubectl --context "$MGMT_CONTEXT" create namespace argocd \
 #
 # Installation ArgoCD
 #
+ARGOCD_FRESH_INSTALL=false
 if ! kubectl --context "$MGMT_CONTEXT" get deployment argocd-server \
   -n argocd >/dev/null 2>&1; then
 
   echo "[INFO] installation ArgoCD"
-
+  ARGOCD_FRESH_INSTALL=true
   kubectl --context "$MGMT_CONTEXT" apply \
     --server-side \
     -n argocd \
@@ -63,6 +65,19 @@ else
 
   echo "[INFO] ArgoCD déjà installé"
 
+fi
+
+# Le manifeste d'installation crée ce ConfigMap sans server.insecure.
+# Appliquer la configuration Git avant de vérifier la disponibilité du serveur.
+kubectl --context "$MGMT_CONTEXT" -n argocd apply \
+  -f "${ROOT_DIR}/applications/argocd/argocd-cmd-params-cm.yaml"
+
+# Lors d'une installation neuve, le pod a pu démarrer avant cette application.
+if [[ "$ARGOCD_FRESH_INSTALL" == "true" ]]; then
+  kubectl --context "$MGMT_CONTEXT" -n argocd \
+    rollout restart deployment/argocd-server
+  kubectl --context "$MGMT_CONTEXT" -n argocd \
+    rollout status deployment/argocd-server --timeout=300s
 fi
 
 #
@@ -82,6 +97,16 @@ kubectl --context "$MGMT_CONTEXT" wait \
   -n argocd \
   --timeout=300s
 
-echo "[OK] ArgoCD disponible"
+if ! insecure_value="$(kubectl --context "$MGMT_CONTEXT" -n argocd \
+  exec deployment/argocd-server -- printenv ARGOCD_SERVER_INSECURE)"; then
+  echo "[STOP] Impossible de lire ARGOCD_SERVER_INSECURE dans argocd-server" >&2
+  exit 1
+fi
 
+[[ "$insecure_value" == "true" ]] || {
+  echo "[STOP] argocd-server n'a pas chargé ARGOCD_SERVER_INSECURE=true" >&2
+  exit 1
+}
+
+echo "[OK] ArgoCD disponible avec ARGOCD_SERVER_INSECURE=true"
 echo "[OK] Argo CD disponible ; Root App non appliquée par ce script"
