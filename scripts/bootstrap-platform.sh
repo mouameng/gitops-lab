@@ -18,12 +18,10 @@ if [[ "${1:-}" == "--plan" ]]; then
         NF != 3 || $1 == "" || $2 == "" || $3 == "" { bad = 1; next }
         {
             if (seen_env[$1]++ || seen_kind[$2]++ || seen_argo[$3]++) bad = 1
-            if (!(($1 == "dev" && $2 == "gitops-dev" && $3 == "workload-dev") ||
-          ($1 == "prod" && $2 == "gitops-prod" && $3 == "workload-prod"))) bad = 1
             if ($1 !~ /^[a-z0-9-]+$/ || $2 !~ /^[a-z0-9-]+$/ || $3 !~ /^[a-z0-9-]+$/) bad = 1
             count++
         }
-        END { if (bad || count != 2) exit 1 }
+        END { if (bad || count < 1) exit 1 }
     ' "$inventory" || { echo "[STOP] Inventaire ou configurations invalides"; exit 1; }
 
     while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
@@ -113,11 +111,9 @@ awk -F '\t' '
     if (seen_argo[$3]++) bad = 1
     if ($1 !~ /^[a-z0-9-]+$/ || $2 !~ /^[a-z0-9-]+$/ ||
         $3 !~ /^[a-z0-9-]+$/) bad = 1
-    if (!(($1 == "dev" && $2 == "gitops-dev" && $3 == "workload-dev") ||
-          ($1 == "prod" && $2 == "gitops-prod" && $3 == "workload-prod"))) bad = 1
   }
   { count++ }
-  END { if (bad || count != 2) exit 1 }
+  END { if (bad || count < 1) exit 1 }
 ' "$INVENTORY" || {
     echo "[ERROR] Inventaire invalide" >&2
     exit 1
@@ -129,6 +125,35 @@ while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
         echo "[ERROR] Configuration Kind absente pour ${environment}" >&2
         exit 1
     }
+done < "$INVENTORY"
+
+while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
+    [[ "$environment" == "environment" ]] && continue
+    for path in \
+        "${ROOT_DIR}/applications/whoami/overlays/${environment}/kustomization.yaml" \
+        "${ROOT_DIR}/argocd/applications/${argocd_cluster}-cluster.yaml"; do
+        [[ -f "$path" ]] || {
+            echo "[STOP] Prérequis GitOps absent : $path" >&2
+            exit 1
+        }
+    done
+    if ! kubectl kustomize \
+        "${ROOT_DIR}/applications/whoami/overlays/${environment}" \
+        >/dev/null; then
+        echo "[STOP] Overlay Whoami invalide : $environment" >&2
+        exit 1
+    fi
+    ingress_matches=0
+    for app in "${ROOT_DIR}"/argocd/applications/ingress-nginx*.yaml; do
+        [[ -f "$app" ]] || continue
+        [[ "$(yq -r '.spec.destination.name' "$app")" == "$argocd_cluster" ]] ||
+            continue
+        ((ingress_matches += 1))
+    done
+    if ((ingress_matches != 1)); then
+        echo "[STOP] Application Ingress absente ou ambiguë : $argocd_cluster" >&2
+        exit 1
+    fi
 done < "$INVENTORY"
 
 while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
@@ -161,13 +186,70 @@ candidate_dir="${HOME}/.config/gitops-lab/registration-candidates"
     echo "[STOP] Répertoire de candidats absent" >&2
     exit 1
 }
-for name in workload-dev workload-prod; do
+while IFS=$'\t' read -r environment kind_cluster name; do
+    [[ "$environment" == "environment" ]] && continue
     candidate="${candidate_dir}/${name}-sealedsecret.yaml"
-    if [[ -e "$candidate" || -L "$candidate" ]]; then
-        echo "[STOP] Chemin candidat déjà occupé : $name" >&2
+    if [[ -L "$candidate" || ( -e "$candidate" && ! -f "$candidate" ) ]]; then
+        echo "[STOP] Chemin candidat invalide : $name" >&2
         exit 1
     fi
-done
+done < "$INVENTORY"
+
+inotify_instances="$(sysctl -n fs.inotify.max_user_instances)"
+[[ "$inotify_instances" =~ ^[0-9]+$ ]] || {
+    echo "[STOP] Valeur inotify illisible" >&2
+    exit 1
+}
+
+if (( inotify_instances < 512 )); then
+    echo "[INFO] Limite inotify à ${inotify_instances} ; passage à 512"
+    sudo -n sysctl -w fs.inotify.max_user_instances=512 >/dev/null || {
+        echo "[STOP] Ajustement inotify impossible ; droits sudo nécessaires" >&2
+        exit 1
+    }
+fi
+
+inotify_instances="$(sysctl -n fs.inotify.max_user_instances)"
+if [[ ! "$inotify_instances" =~ ^[0-9]+$ ]] ||
+   (( inotify_instances < 512 )); then
+    echo "[STOP] Limite inotify toujours insuffisante" >&2
+    exit 1
+fi
+echo "[OK] Limite inotify : $inotify_instances"
+
+[[ "$(git -C "$ROOT_DIR" branch --show-current)" == "main" ]] || {
+    echo "[STOP] PRA automatique autorisé uniquement depuis la branche main" >&2
+    exit 1
+}
+
+local_head="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+remote_head="$(git -C "$ROOT_DIR" ls-remote origin refs/heads/main | cut -f1)"
+[[ -n "$remote_head" && "$local_head" == "$remote_head" ]] || {
+    echo "[STOP] main local et origin/main diffèrent ou le distant est inaccessible" >&2
+    exit 1
+}
+echo "[OK] Branche main alignée avec le dépôt distant"
+
+if ! git -C "$ROOT_DIR" diff --quiet ||
+   ! git -C "$ROOT_DIR" diff --cached --quiet; then
+    echo "[STOP] Fichiers Git suivis ou index déjà modifiés" >&2
+    exit 1
+fi
+echo "[OK] Fichiers Git suivis et index propres avant le menu PRA"
+
+registration_dir="${ROOT_DIR}/clusters/management/cluster-registration"
+while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
+    [[ "$environment" == "environment" ]] && continue
+    relative_path="clusters/management/cluster-registration/${argocd_cluster}-sealedsecret.yaml"
+    destination="${ROOT_DIR}/${relative_path}"
+
+    if [[ -L "$destination" ]] ||
+       [[ -n "$(git -C "$ROOT_DIR" status --porcelain -- "$relative_path")" ]]; then
+        echo "[STOP] Destination Git non disponible : $relative_path" >&2
+        exit 1
+    fi
+done < "$INVENTORY"
+echo "[OK] Destinations Git disponibles avant le menu PRA"
 
 if [[ "$PREFLIGHT_ONLY" -eq 1 ]]; then
     echo "[OK] Prévol terminé ; aucune action Kind ou Kubernetes appliquée"
@@ -192,27 +274,45 @@ else
     printf "  %s\n" "${clusters_to_delete[@]}"
 fi
 
-echo
-if [[ ! -t 0 ]]; then
-    echo "[STOP] Confirmation interactive requise ; aucun cluster supprimé" >&2
-    exit 1
+if ((${#clusters_to_delete[@]} > 0)); then
+    echo
+    if [[ ! -t 0 ]]; then
+        echo "[STOP] Confirmation interactive requise ; aucun cluster supprimé" >&2
+        exit 1
+    fi
+    read -r -p "Choix PRA [1=refuser (défaut), 2=détruire le périmètre affiché] : " choice
+    case "${choice:-1}" in
+        1)
+            echo "[STOP] PRA refusé ; aucun cluster supprimé"
+            exit 1
+            ;;
+        2)
+            printf "[PREVIEW] Destruction demandée pour %s cluster(s) du périmètre PRA\n" "${#clusters_to_delete[@]}"
+            echo "[STOP] Suppression non activée : reconstruction du PRA incomplète"
+            exit 1
+            ;;
+        *)
+            echo "[STOP] Choix invalide ; aucun cluster supprimé" >&2
+            exit 1
+            ;;
+    esac
+else
+    echo "[OK] Aucun cluster du périmètre PRA à détruire ; confirmation inutile"
 fi
-read -r -p "Choix PRA [1=refuser (défaut), 2=détruire le périmètre affiché] : " choice
-case "${choice:-1}" in
-    1)
-        echo "[STOP] PRA refusé ; aucun cluster supprimé"
+
+# Inaccessible tant que les verrous PRA restent actifs.
+for cluster in "${clusters_to_delete[@]}"; do
+    kind delete cluster --name "$cluster"
+done
+
+remaining_clusters="$(kind get clusters)"
+for cluster in gitops-management "${workload_clusters[@]}"; do
+    if grep -Fxq -- "$cluster" <<< "$remaining_clusters"; then
+        echo "[STOP] Cluster du périmètre encore présent : $cluster" >&2
         exit 1
-        ;;
-    2)
-        printf "[PREVIEW] Destruction demandée pour %s cluster(s) du périmètre PRA\n" "${#clusters_to_delete[@]}"
-        echo "[STOP] Suppression non activée : reconstruction du PRA incomplète"
-        exit 1
-        ;;
-    *)
-        echo "[STOP] Choix invalide ; aucun cluster supprimé" >&2
-        exit 1
-        ;;
-esac
+    fi
+done
+echo "[OK] Périmètre PRA absent ; reconstruction possible"
 
 # Reconstruction Kind : inaccessible tant que les arrêts PRA restent actifs.
 for cluster in gitops-management "${workload_clusters[@]}"; do
@@ -303,6 +403,34 @@ kubectl --context "$MGMT_CONTEXT" -n argocd wait \
     --for=jsonpath={.status.health.status}=Healthy \
     application/sealed-secrets --timeout=300s
 
+while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
+    [[ "$environment" == "environment" ]] && continue
+    sealed_file="${ROOT_DIR}/clusters/management/cluster-registration/${argocd_cluster}-sealedsecret.yaml"
+    [[ ! -L "$sealed_file" ]] || {
+        echo "[STOP] Lien symbolique historique interdit : $argocd_cluster" >&2
+        exit 1
+    }
+
+    if [[ ! -e "$sealed_file" ]]; then
+        echo "[INFO] Aucun SealedSecret historique : $argocd_cluster"
+        continue
+    fi
+    [[ -f "$sealed_file" && ! -L "$sealed_file" ]] || {
+        echo "[STOP] Fichier historique invalide : $argocd_cluster" >&2
+        exit 1
+    }
+
+    kubeseal --validate \
+        --context "$MGMT_CONTEXT" \
+        --controller-name sealed-secrets-controller \
+        --controller-namespace sealed-secrets \
+        < "$sealed_file" >/dev/null 2>&1 || {
+        echo "[STOP] Clé restaurée incapable de valider : $argocd_cluster" >&2
+        exit 1
+    }
+    echo "[OK] SealedSecret historique déchiffrable : $argocd_cluster"
+done < "$INVENTORY"
+
 # Jalon PRA : candidats dev/prod, hors Git.
 candidate_dir="${HOME}/.config/gitops-lab/registration-candidates"
 while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
@@ -322,3 +450,279 @@ CANDIDATE_DIR="$candidate_dir" \
 # pour chaque cluster recréé, avant activation de la Root App.
 echo "[STOP] Nouveaux enregistrements dev/prod et transition GitOps non implémentés" >&2
 exit 1
+
+# Publication PRA : chemins derives exclusivement de l'inventaire valide.
+registration_dir="${ROOT_DIR}/clusters/management/cluster-registration"
+candidate_paths=()
+registration_paths=()
+
+while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
+    [[ "$environment" == "environment" ]] && continue
+    candidate_paths+=("${candidate_dir}/${argocd_cluster}-sealedsecret.yaml")
+    registration_paths+=("${registration_dir}/${argocd_cluster}-sealedsecret.yaml")
+done < "$INVENTORY"
+
+printf '[PRA] %s enregistrement(s) a publier\n' "${#registration_paths[@]}"
+
+for candidate in "${candidate_paths[@]}"; do
+    if [[ ! -f "$candidate" || -L "$candidate" ]]; then
+        echo "[STOP] Candidat absent ou lien symbolique : $candidate" >&2
+        exit 1
+    fi
+done
+echo "[OK] Tous les candidats de l'inventaire sont présents"
+
+for destination in "${registration_paths[@]}"; do
+    if [[ -L "$destination" ]]; then
+        echo "[STOP] Destination Git sous forme de lien symbolique : $destination" >&2
+        exit 1
+    fi
+done
+echo "[OK] Destinations Git vérifiées"
+
+for destination in "${registration_paths[@]}"; do
+    relative_path="${destination#"$ROOT_DIR"/}"
+    if [[ -n "$(git -C "$ROOT_DIR" status --porcelain -- "$relative_path")" ]]; then
+        echo "[STOP] Destination Git déjà modifiée : $relative_path" >&2
+        exit 1
+    fi
+done
+echo "[OK] Destinations Git sans modification préalable"
+
+[[ "$(git -C "$ROOT_DIR" branch --show-current)" == "main" ]] || {
+    echo "[STOP] Publication PRA autorisée uniquement depuis la branche main" >&2
+    exit 1
+}
+
+for i in "${!candidate_paths[@]}"; do
+    cp -- "${candidate_paths[$i]}" "${registration_paths[$i]}"
+done
+echo "[OK] Enregistrements copiés vers les chemins Git de l'inventaire"
+
+for i in "${!candidate_paths[@]}"; do
+    if ! cmp -s -- "${candidate_paths[$i]}" "${registration_paths[$i]}"; then
+        echo "[STOP] Copie différente du candidat validé : ${registration_paths[$i]}" >&2
+        exit 1
+    fi
+done
+echo "[OK] Copies identiques aux candidats validés"
+
+relative_registration_paths=()
+for destination in "${registration_paths[@]}"; do
+    relative_registration_paths+=("${destination#"$ROOT_DIR"/}")
+done
+
+git -C "$ROOT_DIR" add -- "${relative_registration_paths[@]}"
+git -C "$ROOT_DIR" diff --cached --check
+echo "[OK] Enregistrements de l'inventaire préparés dans l'index Git"
+
+mapfile -t staged_paths < <(
+    git -C "$ROOT_DIR" diff --cached --name-only | LC_ALL=C sort
+)
+mapfile -t expected_paths < <(
+    printf '%s\n' "${relative_registration_paths[@]}" | LC_ALL=C sort
+)
+
+for staged in "${staged_paths[@]}"; do
+    allowed=0
+    for expected in "${expected_paths[@]}"; do
+        if [[ "$staged" == "$expected" ]]; then
+            allowed=1
+            break
+        fi
+    done
+    if ((allowed == 0)); then
+        echo "[STOP] Fichier inattendu dans l'index Git : $staged" >&2
+        exit 1
+    fi
+done
+
+if ((${#staged_paths[@]} == 0)); then
+    echo "[STOP] Aucun nouvel enregistrement à publier après reconstruction" >&2
+    exit 1
+fi
+echo "[OK] Index Git limité aux enregistrements modifiés de l'inventaire"
+
+git -C "$ROOT_DIR" commit -m "chore(pra): renew workload registrations"
+published_head="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+
+git -C "$ROOT_DIR" push origin HEAD:refs/heads/main
+
+actual_remote_head="$(git -C "$ROOT_DIR" ls-remote origin refs/heads/main | cut -f1)"
+if [[ "$actual_remote_head" != "$published_head" ]]; then
+    echo "[STOP] La révision distante ne correspond pas au commit PRA" >&2
+    exit 1
+fi
+echo "[OK] Enregistrements publiés sur main : $published_head"
+
+for i in "${!candidate_paths[@]}"; do
+    relative_path="${relative_registration_paths[$i]}"
+    if ! git -C "$ROOT_DIR" show "${published_head}:${relative_path}" |
+         cmp -s -- "${candidate_paths[$i]}" -; then
+        echo "[STOP] Le commit publié ne correspond pas au candidat : $relative_path" >&2
+        exit 1
+    fi
+done
+echo "[OK] Commit publié conforme aux candidats de l'inventaire"
+
+registration_app="${ROOT_DIR}/argocd/applications/cluster-registration.yaml"
+
+kubectl --context "$MGMT_CONTEXT" apply --dry-run=server -f "$registration_app"
+kubectl --context "$MGMT_CONTEXT" apply -f "$registration_app"
+echo "[OK] Application cluster-registration déclarée ; synchronisation à vérifier"
+
+kubectl --context "$MGMT_CONTEXT" -n argocd wait \
+    --for="jsonpath={.status.sync.revision}=${published_head}" \
+    application/cluster-registration --timeout=300s
+kubectl --context "$MGMT_CONTEXT" -n argocd wait \
+    --for=jsonpath='{.status.sync.status}'=Synced \
+    application/cluster-registration --timeout=300s
+echo "[OK] cluster-registration synchronisée sur le commit PRA"
+
+while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
+    [[ "$environment" == "environment" ]] && continue
+
+    kubectl --context "$MGMT_CONTEXT" -n argocd wait \
+        --for=create "secret/${argocd_cluster}" --timeout=300s
+
+    if ! kubectl --context "$MGMT_CONTEXT" -n argocd \
+        get secret "$argocd_cluster" -o json |
+        jq -e --arg name "$argocd_cluster" '
+            .metadata.labels["argocd.argoproj.io/secret-type"] == "cluster" and
+            any(.metadata.ownerReferences[]?;
+                .kind == "SealedSecret" and .name == $name)
+        ' >/dev/null; then
+        echo "[STOP] Enregistrement Argo CD invalide : $argocd_cluster" >&2
+        exit 1
+    fi
+    echo "[OK] Secret de cluster présent : $argocd_cluster"
+done < "$INVENTORY"
+
+root_app="${ROOT_DIR}/clusters/management/root-app/root-app.yaml"
+kubectl --context "$MGMT_CONTEXT" apply --dry-run=server -f "$root_app"
+kubectl --context "$MGMT_CONTEXT" apply -f "$root_app"
+echo "[OK] Root App déclarée ; déploiements à vérifier"
+
+while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
+    [[ "$environment" == "environment" ]] && continue
+
+    for attempt in {1..60}; do
+        if kubectl --context "kind-${kind_cluster}" -n whoami \
+            get deployment whoami >/dev/null 2>&1; then
+            break
+        fi
+        sleep 5
+    done
+
+    if ! kubectl --context "kind-${kind_cluster}" -n whoami \
+        get deployment whoami >/dev/null 2>&1; then
+        echo "[STOP] Deployment Whoami absent : ${kind_cluster}" >&2
+        exit 1
+    fi
+
+    kubectl --context "kind-${kind_cluster}" -n whoami \
+        rollout status deployment/whoami --timeout=300s
+    echo "[OK] Whoami disponible sur ${kind_cluster}"
+done < "$INVENTORY"
+
+while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
+    [[ "$environment" == "environment" ]] && continue
+    context="kind-${kind_cluster}"
+
+    for attempt in {1..60}; do
+        controller="$(kubectl --context "$context" -n ingress-nginx \
+            get deployment -l app.kubernetes.io/name=ingress-nginx \
+            -o name 2>/dev/null)" || controller=""
+        [[ -n "$controller" ]] && break
+        sleep 5
+    done
+
+    if [[ -z "$controller" || "$controller" == *$'\n'* ]]; then
+        echo "[STOP] Contrôleur Ingress absent ou non unique : $kind_cluster" >&2
+        exit 1
+    fi
+
+    kubectl --context "$context" -n ingress-nginx \
+        rollout status "$controller" --timeout=300s
+    echo "[OK] Ingress disponible : $kind_cluster"
+done < "$INVENTORY"
+
+while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
+    [[ "$environment" == "environment" ]] && continue
+    context="kind-${kind_cluster}"
+
+    for attempt in {1..60}; do
+        ingress_services="$(kubectl --context "$context" -n ingress-nginx \
+            get svc -l app.kubernetes.io/name=ingress-nginx -o json |
+            jq -c '[.items[] | select(.spec.type == "LoadBalancer")]')" || exit 1
+
+        if [[ "$(jq 'length' <<< "$ingress_services")" == "1" ]] &&
+           [[ -n "$(jq -r '.[0].status.loadBalancer.ingress[0].ip // empty' \
+               <<< "$ingress_services")" ]]; then
+            break
+        fi
+        sleep 5
+    done
+
+    if [[ "$(jq 'length' <<< "$ingress_services")" != "1" ]] ||
+       [[ -z "$(jq -r '.[0].status.loadBalancer.ingress[0].ip // empty' \
+           <<< "$ingress_services")" ]]; then
+        echo "[STOP] Service Ingress ou IP indisponible : $kind_cluster" >&2
+        exit 1
+    fi
+    actual_ip="$(jq -r '.[0].status.loadBalancer.ingress[0].ip' \
+        <<< "$ingress_services")"
+    expected_ip=""
+    matches=0
+
+    for app in "${ROOT_DIR}"/argocd/applications/ingress-nginx*.yaml; do
+        app_destination="$(yq -r '.spec.destination.name' "$app")"
+        [[ "$app_destination" == "$argocd_cluster" ]] || continue
+
+        ((matches += 1))
+        expected_ip="$(yq -r '.spec.source.helm.values' "$app" |
+            yq -r '.controller.service.annotations."metallb.io/loadBalancerIPs"' -)"
+    done
+
+    if ((matches != 1)) || [[ -z "$expected_ip" || "$expected_ip" == "null" ||
+                                "$actual_ip" != "$expected_ip" ]]; then
+        echo "[STOP] IP Ingress incorrecte ou manifeste ambigu : $kind_cluster" >&2
+        exit 1
+    fi
+    echo "[OK] IP Ingress conforme pour ${kind_cluster} : ${actual_ip}"
+done < "$INVENTORY"
+
+while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
+    [[ "$environment" == "environment" ]] && continue
+
+    host="$(kubectl kustomize \
+        "${ROOT_DIR}/applications/whoami/overlays/${environment}" |
+        yq -r 'select(.kind == "Ingress") | .spec.rules[].host')"
+
+    if [[ -z "$host" || "$host" == *$'\n'* ]]; then
+        echo "[STOP] Hôte Whoami absent ou ambigu : $environment" >&2
+        exit 1
+    fi
+
+    response=""
+    for attempt in {1..30}; do
+        response="$(curl --noproxy '*' --max-time 10 -sS \
+            -w $'\n%{http_code}' "http://${host}/")" || response=""
+        [[ "${response##*$'\n'}" == "200" ]] && break
+        sleep 5
+    done
+    http_code="${response##*$'\n'}"
+    response="${response%$'\n'*}"
+    [[ "$http_code" == "200" ]] || {
+        echo "[STOP] Réponse HTTP $http_code : $host" >&2
+        exit 1
+    }
+    pod="$(awk '/^Hostname: / { print $2 }' <<< "$response")"
+    if [[ -z "$pod" || "$pod" == *$'\n'* ]] ||
+       ! kubectl --context "kind-${kind_cluster}" -n whoami \
+           wait --for=condition=Ready "pod/${pod}" --timeout=10s >/dev/null; then
+        echo "[STOP] Pod répondant absent ou non prêt sur ${kind_cluster}" >&2
+        exit 1
+    fi
+    echo "[OK] HTTP 200 : $host ; pod confirmé sur ${kind_cluster} : $pod"
+done < "$INVENTORY"

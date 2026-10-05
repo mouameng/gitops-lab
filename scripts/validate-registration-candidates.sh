@@ -24,6 +24,7 @@ awk -F '\t' '
     if (seen_env[$1]++) bad = 1
     if (seen_kind[$2]++) bad = 1
     if (seen_argo[$3]++) bad = 1
+    if ($1 !~ /^[a-z0-9-]+$/ || $2 !~ /^[a-z0-9-]+$/ || $3 !~ /^[a-z0-9-]+$/) bad = 1
     count++
   }
   END { exit (bad || count == 0) ? 1 : 0 }

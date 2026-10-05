@@ -36,14 +36,10 @@ EXPECTED_OUTPUT="${CANDIDATE_DIR}/${ARGOCD_CLUSTER}-sealedsecret.yaml"
   exit 1
 }
 
-if [[ -e "$OUTPUT" ]]; then
-  echo "[ERROR] Fichier existant, écrasement interdit : $OUTPUT" >&2
-  exit 1
-fi
-
 umask 077
 TMPDIR="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR"' EXIT
+STAGED_OUTPUT="$(mktemp "${CANDIDATE_DIR}/.${ARGOCD_CLUSTER}.XXXXXX")"
+trap 'rm -rf -- "$TMPDIR"; rm -f -- "$STAGED_OUTPUT"' EXIT
 
 echo "=================================================="
 echo "Bootstrap Workload"
@@ -168,7 +164,19 @@ kubeseal \
   --controller-namespace sealed-secrets \
   --format yaml \
   < "$TMPDIR/${ARGOCD_CLUSTER}-secret.yaml" \
-  > "$OUTPUT"
+  > "$STAGED_OUTPUT"
+
+kubeseal --validate \
+  --context "$MGMT_CONTEXT" \
+  --controller-name sealed-secrets-controller \
+  --controller-namespace sealed-secrets \
+  < "$STAGED_OUTPUT" >/dev/null
+
+[[ ! -L "$OUTPUT" && ( ! -e "$OUTPUT" || -f "$OUTPUT" ) ]] || {
+  echo "[STOP] Chemin candidat invalide : $OUTPUT" >&2
+  exit 1
+}
+mv -fT -- "$STAGED_OUTPUT" "$OUTPUT"
 
 echo
 echo "[OK] Généré : $OUTPUT"
