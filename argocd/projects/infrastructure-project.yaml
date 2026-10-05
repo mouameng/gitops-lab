@@ -15,6 +15,7 @@ spec:
     - https://charts.jetstack.io
     - https://traefik.github.io/charts
     - https://kubernetes-sigs.github.io/metrics-server/
+    - https://dl.gitea.io/charts
   destinations:
     - name: workload-dev
       namespace: '*'

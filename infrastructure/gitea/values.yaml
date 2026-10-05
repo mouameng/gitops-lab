@@ -1,0 +1,27 @@
+valkey-cluster:
+  enabled: false
+valkey:
+  enabled: false
+postgresql:
+  enabled: false
+postgresql-ha:
+  enabled: false
+
+persistence:
+  enabled: true
+  storageClass: standard
+  size: 2Gi
+
+gitea:
+  admin:
+    existingSecret: gitea-admin-secret
+    passwordMode: initialOnlyNoReset
+  config:
+    database:
+      DB_TYPE: sqlite3
+    session:
+      PROVIDER: memory
+    cache:
+      ADAPTER: memory
+    queue:
+      TYPE: level
