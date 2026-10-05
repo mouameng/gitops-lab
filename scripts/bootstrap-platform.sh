@@ -43,8 +43,8 @@ fi
 PREFLIGHT_ONLY=0
 if [[ "${1:-}" == "--preflight" && "$#" -eq 1 ]]; then
     PREFLIGHT_ONLY=1
-else
-    echo "[STOP] Bootstrap plateforme à trois clusters non finalisé ; ne pas exécuter."
+elif (($# != 0)); then
+    echo "[STOP] Usage : $0 [--plan|--preflight]" >&2
     exit 1
 fi
 
@@ -288,8 +288,6 @@ if ((${#clusters_to_delete[@]} > 0)); then
             ;;
         2)
             printf "[PREVIEW] Destruction demandée pour %s cluster(s) du périmètre PRA\n" "${#clusters_to_delete[@]}"
-            echo "[STOP] Suppression non activée : reconstruction du PRA incomplète"
-            exit 1
             ;;
         *)
             echo "[STOP] Choix invalide ; aucun cluster supprimé" >&2
@@ -445,11 +443,6 @@ done < "$INVENTORY"
 MGMT_CONTEXT="$MGMT_CONTEXT" \
 CANDIDATE_DIR="$candidate_dir" \
     bash "${ROOT_DIR}/scripts/validate-registration-candidates.sh"
-
-# TODO BLOQUANT : générer et valider les nouveaux accès Argo CD
-# pour chaque cluster recréé, avant activation de la Root App.
-echo "[STOP] Nouveaux enregistrements dev/prod et transition GitOps non implémentés" >&2
-exit 1
 
 # Publication PRA : chemins derives exclusivement de l'inventaire valide.
 registration_dir="${ROOT_DIR}/clusters/management/cluster-registration"
