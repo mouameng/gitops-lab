@@ -17,6 +17,10 @@ gitea:
     existingSecret: gitea-admin-secret
     passwordMode: initialOnlyNoReset
   config:
+    server:
+      DOMAIN: gitea.local
+      ROOT_URL: https://gitea.local/
+      SSH_DOMAIN: gitea.local
     database:
       DB_TYPE: sqlite3
     session:

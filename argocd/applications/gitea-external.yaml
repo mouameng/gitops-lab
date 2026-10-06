@@ -1,0 +1,14 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitea-external
+  namespace: argocd
+spec:
+  project: infrastructure
+  source:
+    repoURL: https://github.com/mouameng/gitops-lab.git
+    targetRevision: main
+    path: applications/gitea
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitea
