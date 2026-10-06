@@ -825,16 +825,36 @@ done < "$INVENTORY"
     kubectl config set-context "$MGMT_CONTEXT" \
         --namespace=argocd >/dev/null
 
+    log_dir="$HOME/.local/share/gitops-lab/logs"
+    mkdir -p "$log_dir"
+    sync_log="$(mktemp "$log_dir/argocd-sync.XXXXXXXX.log")"
+
+    echo "[INFO] Journal detaille Argo CD : $sync_log"
+
     for app in gitea gitea-external; do
         kubectl --context "$MGMT_CONTEXT" -n argocd \
             wait --for=create "application/$app" \
             --timeout=300s
 
-        argocd --core --kube-context "$MGMT_CONTEXT" \
-            app sync "$app" --timeout 300
+        echo "[INFO] Synchronisation : $app"
 
-        argocd --core --kube-context "$MGMT_CONTEXT" \
-            app wait "$app" --sync --health --timeout 300
+        if ! argocd --core --kube-context "$MGMT_CONTEXT" \
+            app sync "$app" --timeout 300 \
+            >> "$sync_log" 2>&1; then
+            echo "[STOP] Synchronisation echouee : $app" >&2
+            tail -n 80 "$sync_log" >&2
+            exit 1
+        fi
+
+        if ! argocd --core --kube-context "$MGMT_CONTEXT" \
+            app wait "$app" --sync --health --timeout 300 \
+            >> "$sync_log" 2>&1; then
+            echo "[STOP] Attente Synced/Healthy echouee : $app" >&2
+            tail -n 80 "$sync_log" >&2
+            exit 1
+        fi
+
+        echo "[OK] Application Synced/Healthy : $app"
     done
 )
 
