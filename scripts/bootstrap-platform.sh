@@ -251,6 +251,35 @@ while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
 done < "$INVENTORY"
 echo "[OK] Destinations Git disponibles avant le menu PRA"
 
+# Prerequis Gitea avant le menu destructif.
+for tool in argocd mktemp; do
+    command -v "$tool" >/dev/null || {
+        echo "[STOP] Outil absent : $tool" >&2
+        exit 1
+    }
+done
+
+for script in backup-gitea.sh restore-gitea.sh; do
+    path="${ROOT_DIR}/scripts/$script"
+    [[ -f "$path" && ! -L "$path" ]] || {
+        echo "[STOP] Script absent ou invalide : $script" >&2
+        exit 1
+    }
+    bash -n "$path"
+done
+
+for file in gitea-restore-pvc.yaml gitea-restore-pod.yaml; do
+    [[ -f "${ROOT_DIR}/scripts/manifests/$file" &&
+       ! -L "${ROOT_DIR}/scripts/manifests/$file" ]] || {
+        echo "[STOP] Manifeste absent ou invalide : $file" >&2
+        exit 1
+    }
+done
+
+bash "${ROOT_DIR}/scripts/backup-gitea.sh" --latest
+echo "[OK] Prerequis locaux Gitea controles avant destruction"
+
+
 if [[ "$PREFLIGHT_ONLY" -eq 1 ]]; then
     echo "[OK] Prévol terminé ; aucune action Kind ou Kubernetes appliquée"
     exit 0
@@ -297,6 +326,39 @@ if ((${#clusters_to_delete[@]} > 0)); then
 else
     echo "[OK] Aucun cluster du périmètre PRA à détruire ; confirmation inutile"
 fi
+
+# Choisir et figer le jeu Gitea avant toute destruction.
+GITEA_BACKUP_SCRIPT="${ROOT_DIR}/scripts/backup-gitea.sh"
+
+if grep -Fxq -- gitops-management <<< "$existing_clusters"; then
+    echo "[INFO] Sauvegarde fraiche de Gitea avant destruction"
+
+    gitea_backup_output="$(
+        bash "$GITEA_BACKUP_SCRIPT" --backup
+    )"
+else
+    echo "[INFO] Management absent ; selection du dernier jeu valide"
+
+    gitea_backup_output="$(
+        bash "$GITEA_BACKUP_SCRIPT" --latest
+    )"
+fi
+
+
+printf '%s\n' "$gitea_backup_output"
+
+GITEA_GAME="$(
+    printf '%s\n' "$gitea_backup_output" |
+        awk '$1 == "[SELECT]" { print $2 }'
+)"
+
+if [[ ! "$GITEA_GAME" =~ ^[0-9]{8}-[0-9]{6}$ ]]; then
+    echo "[STOP] Selection Gitea absente ou ambigue ; destruction suspendue" >&2
+    exit 1
+fi
+
+bash "$GITEA_BACKUP_SCRIPT" --validate "$GITEA_GAME"
+echo "[OK] Jeu Gitea fige pour ce PRA : $GITEA_GAME"
 
 # Inaccessible tant que les verrous PRA restent actifs.
 for cluster in "${clusters_to_delete[@]}"; do
@@ -591,6 +653,16 @@ while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
     echo "[OK] Secret de cluster présent : $argocd_cluster"
 done < "$INVENTORY"
 
+echo "[INFO] Restauration Gitea avant activation de la Root App"
+
+bash "${ROOT_DIR}/scripts/restore-gitea.sh" \
+    --preflight "$GITEA_GAME"
+
+bash "${ROOT_DIR}/scripts/restore-gitea.sh" \
+    --restore "$GITEA_GAME"
+
+echo "[OK] Donnees Gitea restaurees avant la Root App"
+
 root_app="${ROOT_DIR}/clusters/management/root-app/root-app.yaml"
 kubectl --context "$MGMT_CONTEXT" apply --dry-run=server -f "$root_app"
 kubectl --context "$MGMT_CONTEXT" apply -f "$root_app"
@@ -719,3 +791,46 @@ while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
     fi
     echo "[OK] HTTP 200 : $host ; pod confirmé sur ${kind_cluster} : $pod"
 done < "$INVENTORY"
+
+# Synchronisation Gitea apres restauration des donnees.
+(
+    set -euo pipefail
+    umask 077
+
+    tmp_kubeconfig="$(mktemp)"
+    trap 'rm -f "$tmp_kubeconfig"' EXIT
+
+    kubectl --context "$MGMT_CONTEXT" \
+        config view --minify --raw > "$tmp_kubeconfig"
+
+    export KUBECONFIG="$tmp_kubeconfig"
+
+    kubectl config set-context "$MGMT_CONTEXT" \
+        --namespace=argocd >/dev/null
+
+    for app in gitea gitea-external; do
+        kubectl --context "$MGMT_CONTEXT" -n argocd \
+            wait --for=create "application/$app" \
+            --timeout=300s
+
+        argocd --core --kube-context "$MGMT_CONTEXT" \
+            app sync "$app" --timeout 300
+
+        argocd --core --kube-context "$MGMT_CONTEXT" \
+            app wait "$app" --sync --health --timeout 300
+    done
+)
+
+kubectl --context "$MGMT_CONTEXT" -n gitea \
+    rollout status deployment/gitea --timeout=300s
+
+kubectl --context "$MGMT_CONTEXT" -n gitea \
+    wait --for=jsonpath='{.status.phase}'=Bound \
+    pvc/gitea-shared-storage --timeout=60s
+
+kubectl --context "$MGMT_CONTEXT" -n gitea \
+    wait --for=condition=Ready \
+    certificate/gitea-local --timeout=300s
+
+echo "[OK] Gitea synchronisee, Deployment disponible, PVC lie et certificat pret"
+echo "[INFO] Connexion et contenu des depots encore a verifier"
