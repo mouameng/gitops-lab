@@ -276,9 +276,6 @@ for file in gitea-restore-pvc.yaml gitea-restore-pod.yaml; do
     }
 done
 
-bash "${ROOT_DIR}/scripts/backup-gitea.sh" --latest
-echo "[OK] Prerequis locaux Gitea controles avant destruction"
-
 export ARGOCD_ADMIN_HASH_FILE="${ARGOCD_ADMIN_HASH_FILE:-$HOME/.config/gitops-lab/argocd-admin-password.bcrypt}"
 
 [[ -f "$ARGOCD_ADMIN_HASH_FILE" &&
