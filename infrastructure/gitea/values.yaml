@@ -29,3 +29,7 @@ gitea:
       ADAPTER: memory
     queue:
       TYPE: level
+
+strategy:
+  type: Recreate
+  rollingUpdate: null
