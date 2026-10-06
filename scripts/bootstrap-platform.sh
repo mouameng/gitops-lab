@@ -279,6 +279,23 @@ done
 bash "${ROOT_DIR}/scripts/backup-gitea.sh" --latest
 echo "[OK] Prerequis locaux Gitea controles avant destruction"
 
+export ARGOCD_ADMIN_HASH_FILE="${ARGOCD_ADMIN_HASH_FILE:-$HOME/.config/gitops-lab/argocd-admin-password.bcrypt}"
+
+[[ -f "$ARGOCD_ADMIN_HASH_FILE" &&
+   -r "$ARGOCD_ADMIN_HASH_FILE" &&
+   ! -L "$ARGOCD_ADMIN_HASH_FILE" ]] || {
+    echo "[STOP] Fichier bcrypt administrateur absent ou invalide" >&2
+    exit 1
+}
+
+[[ "$(wc -l < "$ARGOCD_ADMIN_HASH_FILE")" -eq 1 ]] &&
+grep -Eq '^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$' \
+    "$ARGOCD_ADMIN_HASH_FILE" || {
+    echo "[STOP] Format bcrypt administrateur invalide" >&2
+    exit 1
+}
+
+echo "[OK] Hash administrateur Argo CD controle avant destruction"
 
 if [[ "$PREFLIGHT_ONLY" -eq 1 ]]; then
     echo "[OK] Prévol terminé ; aucune action Kind ou Kubernetes appliquée"

@@ -7,6 +7,23 @@ CLUSTER_NAME="${CLUSTER_NAME:?Définir CLUSTER_NAME explicitement}"
 ARGOCD_NAMESPACE="argocd"
 ARGOCD_MANIFEST="${ARGOCD_MANIFEST:?Définir ARGOCD_MANIFEST explicitement}"
 EXPECTED_SHA256="7efe2d6bbc03f63623640f1e4198f16c84009d510fb810ef71e56df1b7614ba9"
+ARGOCD_ADMIN_HASH_FILE="${ARGOCD_ADMIN_HASH_FILE:-$HOME/.config/gitops-lab/argocd-admin-password.bcrypt}"
+
+[[ -f "$ARGOCD_ADMIN_HASH_FILE" &&
+   -r "$ARGOCD_ADMIN_HASH_FILE" &&
+   ! -L "$ARGOCD_ADMIN_HASH_FILE" ]] || {
+    echo "[STOP] Fichier bcrypt administrateur absent ou invalide" >&2
+    exit 1
+}
+
+[[ "$(wc -l < "$ARGOCD_ADMIN_HASH_FILE")" -eq 1 ]] &&
+grep -Eq '^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$' \
+    "$ARGOCD_ADMIN_HASH_FILE" || {
+    echo "[STOP] Format bcrypt administrateur invalide" >&2
+    exit 1
+}
+
+echo "[OK] Fichier bcrypt administrateur controle"
 
 [[ -f "$ARGOCD_MANIFEST" && -r "$ARGOCD_MANIFEST" ]] || {
   echo "[STOP] Manifeste Argo CD absent ou illisible" >&2
@@ -107,6 +124,37 @@ fi
   echo "[STOP] argocd-server n'a pas chargé ARGOCD_SERVER_INSECURE=true" >&2
   exit 1
 }
+
+if [[ "$ARGOCD_FRESH_INSTALL" == "true" ]]; then
+    (
+        set -euo pipefail
+        set +x
+        umask 077
+
+        patch_file="$(mktemp)"
+        trap 'rm -f "$patch_file"' EXIT
+
+        jq -n --rawfile hash "$ARGOCD_ADMIN_HASH_FILE" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{stringData: {
+                "admin.password": ($hash | rtrimstr("\n")),
+                "admin.passwordMtime": $timestamp
+            }}' > "$patch_file"
+
+        kubectl --context "$MGMT_CONTEXT" -n argocd \
+            patch secret argocd-secret --type=merge \
+            --patch-file "$patch_file" \
+            --dry-run=server -o name
+
+        kubectl --context "$MGMT_CONTEXT" -n argocd \
+            patch secret argocd-secret --type=merge \
+            --patch-file "$patch_file" -o name
+
+        echo "[OK] Mot de passe admin configure depuis le hash hors Git"
+    )
+else
+    echo "[INFO] Instance existante : mot de passe admin inchange"
+fi
 
 echo "[OK] ArgoCD disponible avec ARGOCD_SERVER_INSECURE=true"
 echo "[OK] Argo CD disponible ; Root App non appliquée par ce script"
