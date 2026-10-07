@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-2048
+  namespace: game-2048
+  labels:
+    app.kubernetes.io/name: game-2048
+    app.kubernetes.io/part-of: games
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: game-2048
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: game-2048
+        app.kubernetes.io/part-of: games
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: game-2048
+          # Référence sans tag ni digest : chaque overlay fixe le digest (images:).
+          image: gitea.local/gitea_admin/2048
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

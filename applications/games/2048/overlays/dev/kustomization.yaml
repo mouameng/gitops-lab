@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - ingress.yaml
+images:
+  # Source gitea_admin/2048 @ 8c32cea ; digest de l'index OCI publié dans Gitea.
+  - name: gitea.local/gitea_admin/2048
+    digest: sha256:c76fe9312b4e7dc20bd08117023d337c604274c4bc613b6690fc70200e892b7d
