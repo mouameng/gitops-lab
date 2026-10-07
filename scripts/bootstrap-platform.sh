@@ -30,12 +30,21 @@ if [[ "${1:-}" == "--plan" ]]; then
             echo "[STOP] Configuration Kind absente : $environment"
             exit 1
         }
+        grep -q 'config_path = "/etc/containerd/certs.d"' "$root/clusters/workload-${environment}/kind-config.yaml" || {
+            echo "[STOP] config_path containerd absent du kind-config : $environment"
+            exit 1
+        }
     done < "$inventory"
 
+    test -x "$root/scripts/configure-workload-registry.sh" || {
+        echo "[STOP] Script absent ou non exécutable : scripts/configure-workload-registry.sh"
+        exit 1
+    }
     echo "[PLAN] kind create cluster --name gitops-management --config clusters/management/kind-config.yaml"
     awk -F '\t' 'NR > 1 {
         printf "[PLAN] kind create cluster --name %s --config clusters/workload-%s/kind-config.yaml\n", $2, $1
     }' "$inventory"
+    echo "[PLAN] bash scripts/configure-workload-registry.sh (gitea.local, CA et hosts.toml sur les nœuds workload)"
     echo "[OK] Plan affiché ; aucune action Kubernetes ou Docker exécutée"
     exit 0
 fi
@@ -63,6 +72,23 @@ KEY_BACKUP="${KEY_BACKUP:-${HOME}/.config/gitops-lab/sealed-secrets-keyx9rjr-202
     echo "[ERROR] Inventaire absent : $INVENTORY" >&2
     exit 1
 }
+
+# Accès au registre Gitea : refuser AVANT toute destruction si le patch containerd
+# ou le script d'accès manque (sinon l'échec surviendrait après la recréation).
+[[ -x "${ROOT_DIR}/scripts/configure-workload-registry.sh" ]] || {
+    echo "[STOP] Script absent ou non exécutable : scripts/configure-workload-registry.sh" >&2
+    exit 1
+}
+while IFS=$'\t' read -r -u 3 environment _kind_cluster _argocd_cluster; do
+    [[ "$environment" == "environment" ]] && continue
+    [[ -n "$environment" ]] || continue
+    grep -qF 'config_path = "/etc/containerd/certs.d"' \
+        "${ROOT_DIR}/clusters/workload-${environment}/kind-config.yaml" || {
+        echo "[STOP] config_path containerd absent du kind-config : ${environment}" >&2
+        exit 1
+    }
+done 3< "$INVENTORY"
+echo "[OK] Garde registre : script présent, config_path dans les kind-config workload"
 [[ -f "$KEY_BACKUP" && -r "$KEY_BACKUP" ]] || {
     echo "[ERROR] Sauvegarde de clé absente ou illisible" >&2
     exit 1
@@ -442,6 +468,10 @@ while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
     kubectl --context "kind-${kind_cluster}" wait \
         --for=condition=Ready "node/${kind_cluster}-control-plane" --timeout=300s
 done < "$INVENTORY"
+
+# Accès des nœuds workload au registre Gitea (résolution, CA, hosts.toml).
+# Une seule fois, après création de tous les workloads ; rejouable seul.
+bash "${ROOT_DIR}/scripts/configure-workload-registry.sh"
 
 # Installer Argo CD sur le management recréé, sans activer la Root App.
 CLUSTER_NAME=gitops-management \
