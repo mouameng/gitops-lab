@@ -294,6 +294,40 @@ grep -Eq '^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$' \
 
 echo "[OK] Hash administrateur Argo CD controle avant destruction"
 
+CA_DIR="${HOME}/.config/gitops-lab"
+CA_CERT="${CA_DIR}/gitops-lab-root-ca.crt"
+CA_KEY="${CA_DIR}/gitops-lab-root-ca.key"
+
+for file in "$CA_CERT" "$CA_KEY"; do
+    [[ -f "$file" && -r "$file" && ! -L "$file" ]] || {
+        echo "[STOP] Fichier CA absent, illisible ou lien symbolique" >&2
+        exit 1
+    }
+done
+
+openssl x509 -in "$CA_CERT" -noout -checkend 0 >/dev/null || {
+    echo "[STOP] Certificat CA expiré ou invalide" >&2
+    exit 1
+}
+
+openssl x509 -in "$CA_CERT" -noout -ext basicConstraints |
+    grep -Fq 'CA:TRUE' || {
+    echo "[STOP] Certificat sans contrainte CA:TRUE" >&2
+    exit 1
+}
+
+ca_cert_pub="$(openssl x509 -in "$CA_CERT" -pubkey -noout |
+    openssl pkey -pubin -outform DER | openssl dgst -sha256)"
+ca_key_pub="$(openssl pkey -in "$CA_KEY" -pubout -outform DER |
+    openssl dgst -sha256)"
+
+[[ -n "$ca_cert_pub" && "$ca_cert_pub" == "$ca_key_pub" ]] || {
+    echo "[STOP] Paire CA incohérente" >&2
+    exit 1
+}
+unset ca_cert_pub ca_key_pub
+echo "[OK] Paire CA locale validée avant destruction"
+
 if [[ "$PREFLIGHT_ONLY" -eq 1 ]]; then
     echo "[OK] Prévol terminé ; aucune action Kind ou Kubernetes appliquée"
     exit 0
@@ -420,6 +454,64 @@ kubectl --context "$MGMT_CONTEXT" get --raw=/readyz >/dev/null || {
     echo "[ERROR] API management inaccessible ; restauration refusée" >&2
     exit 1
 }
+# Restaurer la CA avant que la Root App ne déploie son ClusterIssuer.
+kubectl --context "$MGMT_CONTEXT" create namespace cert-manager \
+    --dry-run=client -o yaml |
+    kubectl --context "$MGMT_CONTEXT" apply -f -
+
+if ! existing_ca="$(kubectl --context "$MGMT_CONTEXT" -n cert-manager \
+    get secret gitops-lab-root-ca --ignore-not-found -o name)"; then
+    echo "[STOP] Lecture du Secret CA impossible ; restauration refusée" >&2
+    exit 1
+fi
+
+if [[ -n "$existing_ca" ]]; then
+    echo "[STOP] Secret CA déjà présent ; restauration refusée" >&2
+    exit 1
+fi
+unset existing_ca
+
+kubectl --context "$MGMT_CONTEXT" -n cert-manager \
+    create secret tls gitops-lab-root-ca \
+    --cert="$CA_CERT" --key="$CA_KEY" \
+    --dry-run=client -o yaml |
+    kubectl --context "$MGMT_CONTEXT" create -f - >/dev/null
+
+restored_ca_fingerprint="$(
+    kubectl --context "$MGMT_CONTEXT" -n cert-manager \
+        get secret gitops-lab-root-ca -o jsonpath='{.data.tls\.crt}' |
+        base64 -d | openssl x509 -noout -fingerprint -sha256
+)"
+local_ca_fingerprint="$(
+    openssl x509 -in "$CA_CERT" -noout -fingerprint -sha256
+)"
+
+[[ "$restored_ca_fingerprint" == "$local_ca_fingerprint" ]] || {
+    echo "[STOP] Certificat CA restauré différent de la source locale" >&2
+    exit 1
+}
+
+restored_ca_pub="$(
+    kubectl --context "$MGMT_CONTEXT" -n cert-manager \
+        get secret gitops-lab-root-ca -o jsonpath='{.data.tls\.key}' |
+        base64 -d |
+        openssl pkey -pubout -outform DER |
+        openssl dgst -sha256
+)"
+local_ca_pub="$(
+    openssl pkey -in "$CA_KEY" -pubout -outform DER |
+        openssl dgst -sha256
+)"
+
+[[ -n "$restored_ca_pub" && "$restored_ca_pub" == "$local_ca_pub" ]] || {
+    echo "[STOP] Clé CA restaurée différente de la source locale" >&2
+    exit 1
+}
+unset restored_ca_pub local_ca_pub
+
+unset restored_ca_fingerprint local_ca_fingerprint
+echo "[OK] Certificat et clé CA restaurés et vérifiés avant la Root App"
+
 kubectl --context "$MGMT_CONTEXT" create namespace sealed-secrets \
     --dry-run=client -o yaml |
     kubectl --context "$MGMT_CONTEXT" apply -f -
