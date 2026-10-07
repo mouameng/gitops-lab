@@ -6,7 +6,7 @@ metadata:
 spec:
   secretName: gitea-local-tls
   issuerRef:
-    name: selfsigned-cluster-issuer
+    name: gitops-lab-ca-issuer
     kind: ClusterIssuer
   dnsNames:
     - gitea.local
