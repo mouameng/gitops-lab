@@ -8,7 +8,7 @@ spec:
   secretName: argocd-local-tls
 
   issuerRef:
-    name: selfsigned-cluster-issuer
+    name: gitops-lab-ca-issuer
     kind: ClusterIssuer
 
   dnsNames:
