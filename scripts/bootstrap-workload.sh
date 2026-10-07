@@ -42,7 +42,7 @@ STAGED_OUTPUT="$(mktemp "${CANDIDATE_DIR}/.${ARGOCD_CLUSTER}.XXXXXX")"
 trap 'rm -rf -- "$TMPDIR"; rm -f -- "$STAGED_OUTPUT"' EXIT
 
 echo "=================================================="
-echo "Bootstrap Workload"
+echo "Bootstrap Workload ${KIND_CLUSTER}"
 echo "=================================================="
 
 command -v kubectl >/dev/null
