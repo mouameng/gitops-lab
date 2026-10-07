@@ -9,7 +9,7 @@ spec:
   description: Workloads applicatifs
 
   sourceRepos:
-    - https://github.com/mouameng/gitops-lab.git
+    - http://gitea-http.gitea.svc.cluster.local:3000/gitea_admin/gitops-lab.git
 
   destinations:
     - name: workload-dev

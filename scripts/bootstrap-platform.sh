@@ -249,12 +249,14 @@ echo "[OK] Limite inotify : $inotify_instances"
 }
 
 local_head="$(git -C "$ROOT_DIR" rev-parse HEAD)"
-remote_head="$(git -C "$ROOT_DIR" ls-remote origin refs/heads/main | cut -f1)"
+remote_head="$(git -C "$ROOT_DIR" ls-remote gitea refs/heads/main | cut -f1)"
 [[ -n "$remote_head" && "$local_head" == "$remote_head" ]] || {
-    echo "[STOP] main local et origin/main diffèrent ou le distant est inaccessible" >&2
+    echo "[STOP] main local et gitea/main diffèrent ou Gitea est inaccessible" >&2
     exit 1
 }
 echo "[OK] Branche main alignée avec le dépôt distant"
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea-publish.sh" --check
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/install-gitea-direct.sh" --render-check
 
 if ! git -C "$ROOT_DIR" diff --quiet ||
    ! git -C "$ROOT_DIR" diff --cached --quiet; then
@@ -642,6 +644,24 @@ MGMT_CONTEXT="$MGMT_CONTEXT" \
 CANDIDATE_DIR="$candidate_dir" \
     bash "${ROOT_DIR}/scripts/validate-registration-candidates.sh"
 
+# v1.3.0 : Gitea est la source de verite. Il doit etre restaure et installe
+# AVANT le commit des enregistrements et AVANT cluster-registration / Root App.
+echo "[INFO] Restauration Gitea avant activation de la Root App"
+
+bash "${ROOT_DIR}/scripts/restore-gitea.sh" \
+    --preflight "$GITEA_GAME"
+
+bash "${ROOT_DIR}/scripts/restore-gitea.sh" \
+    --restore "$GITEA_GAME"
+
+echo "[OK] Donnees Gitea restaurees avant la Root App"
+
+# Installation directe de Gitea (helm template + kubectl apply) ; Argo CD
+# reprend la main a la synchronisation de l'Application gitea.
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/install-gitea-direct.sh" --preflight
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/install-gitea-direct.sh" --install
+echo "[OK] Gitea installe directement et pret avant la publication"
+
 # Publication PRA : chemins derives exclusivement de l'inventaire valide.
 registration_dir="${ROOT_DIR}/clusters/management/cluster-registration"
 candidate_paths=()
@@ -737,9 +757,9 @@ echo "[OK] Index Git limité aux enregistrements modifiés de l'inventaire"
 git -C "$ROOT_DIR" commit -m "chore(pra): renew workload registrations"
 published_head="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 
-git -C "$ROOT_DIR" push origin HEAD:refs/heads/main
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea-publish.sh" --push "$published_head"
 
-actual_remote_head="$(git -C "$ROOT_DIR" ls-remote origin refs/heads/main | cut -f1)"
+actual_remote_head="$published_head"  # main distant relu et compare par gitea-publish.sh apres le push
 if [[ "$actual_remote_head" != "$published_head" ]]; then
     echo "[STOP] La révision distante ne correspond pas au commit PRA" >&2
     exit 1
@@ -789,15 +809,6 @@ while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
     echo "[OK] Secret de cluster présent : $argocd_cluster"
 done < "$INVENTORY"
 
-echo "[INFO] Restauration Gitea avant activation de la Root App"
-
-bash "${ROOT_DIR}/scripts/restore-gitea.sh" \
-    --preflight "$GITEA_GAME"
-
-bash "${ROOT_DIR}/scripts/restore-gitea.sh" \
-    --restore "$GITEA_GAME"
-
-echo "[OK] Donnees Gitea restaurees avant la Root App"
 
 root_app="${ROOT_DIR}/clusters/management/root-app/root-app.yaml"
 kubectl --context "$MGMT_CONTEXT" apply --dry-run=server -f "$root_app"

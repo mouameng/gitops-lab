@@ -6,7 +6,7 @@ metadata:
 spec:
   project: infrastructure
   source:
-    repoURL: https://github.com/mouameng/gitops-lab.git
+    repoURL: http://gitea-http.gitea.svc.cluster.local:3000/gitea_admin/gitops-lab.git
     targetRevision: main
     path: applications/gitea
   destination:
