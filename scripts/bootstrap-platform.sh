@@ -282,6 +282,28 @@ case "$mirror_status" in
     *) echo "[WARN] Contrôle du dépôt de secours en erreur ($mirror_status) ; le PRA s'arrêtera avant destruction" ;;
 esac
 
+# Éléments hors source de vérité (inventaire scripts/external-deps.tsv) : contrôle seul.
+# Codes 0 et 2 : le prévol continue ; codes 1 (inventaire invalide) et 3 : arrêt avant le menu PRA.
+EXTERNAL_DEPS_SCRIPT="${ROOT_DIR}/scripts/check-external-deps.sh"
+[[ -f "$EXTERNAL_DEPS_SCRIPT" && -x "$EXTERNAL_DEPS_SCRIPT" ]] || {
+    echo "[STOP] Script absent ou non exécutable : $EXTERNAL_DEPS_SCRIPT" >&2
+    exit 1
+}
+external_deps_args=(--check)
+if [[ "${EXTERNAL_DEPS_OFFLINE:-0}" == "1" ]]; then
+    external_deps_args+=(--offline)
+fi
+external_deps_status=0
+"$EXTERNAL_DEPS_SCRIPT" "${external_deps_args[@]}" || external_deps_status=$?
+case "$external_deps_status" in
+    0) echo "[OK] Éléments hors source de vérité conformes" ;;
+    2) echo "[WARN] Éléments hors source de vérité en avertissement (voir ci-dessus) ; le prévol continue" ;;
+    *)
+        echo "[STOP] Éléments hors source de vérité critiques ou inventaire invalide (code $external_deps_status)" >&2
+        exit 1
+        ;;
+esac
+
 if ! git -C "$ROOT_DIR" diff --quiet ||
    ! git -C "$ROOT_DIR" diff --cached --quiet; then
     echo "[STOP] Fichiers Git suivis ou index déjà modifiés" >&2
