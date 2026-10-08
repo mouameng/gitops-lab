@@ -1,0 +1,41 @@
+# external-deps.tsv — inventaire des éléments nécessaires au PRA, HORS source de vérité (Gitea / Git).
+# Lu par scripts/check-external-deps.sh (--list, --check). Ne contient JAMAIS de secret : seulement des chemins et des règles.
+# 6 colonnes séparées par des TABULATIONS : id, niveau, contrôle, cible, attendu, note. « - » = vide.
+# Niveau   : BLOCK (PRA irrécupérable sans) | WARN (dégradé) | INFO (informatif).
+# Contrôle : covered (garde déjà dans le bootstrap : « attendu » = fragment du message de cette garde, vérifié dans scripts/*.sh)
+#            manual (non vérifiable par script) | path (existence, non vide, mode octal attendu) | file-newer (cible >= fichier attendu)
+#            hosts (cible = nom, attendu = IP) | ca-trust (cible = certificat) | disk-free (cible = dossier, attendu = Mo)
+#            cmd (cible = outils séparés par des virgules) | argocd-repos (cible = dossier du dépôt contenant les repoURL)
+# Ajouter un élément hors Git = ajouter une ligne ici, dans le même commit.
+#
+# --- Couverts par une garde existante du bootstrap (non réévalués ici) ---
+sealed-key-active	BLOCK	covered	~/.config/gitops-lab/sealed-secrets-keyx9rjr-2026-09-29.yaml	Sauvegarde de clé validée localement	Clé Sealed Secrets active (KEY_BACKUP de bootstrap-platform.sh). Sans elle, les SealedSecrets du dépôt ne sont plus déchiffrables.
+argocd-manifest	BLOCK	covered	~/.config/gitops-lab/pra-isolated/argocd-v3.5.3-install.yaml	Manifeste Argo CD vérifié avant le menu PRA	Manifeste Argo CD épinglé (SHA-256 écrit en dur dans le bootstrap). Le nom du dossier pra-isolated est un héritage : à revoir en v1.4.0.
+ca-cert	BLOCK	covered	~/.config/gitops-lab/gitops-lab-root-ca.crt	Paire CA locale validée avant destruction	Certificat de la CA privée du lab ; le PRA recrée le Secret gitops-lab-root-ca à partir de la paire.
+ca-key	BLOCK	covered	~/.config/gitops-lab/gitops-lab-root-ca.key	Paire CA locale validée avant destruction	Clé privée de la CA. Sa perte impose une nouvelle CA et la réémission de tous les certificats.
+argocd-admin-hash	BLOCK	covered	~/.config/gitops-lab/argocd-admin-password.bcrypt	Hash administrateur Argo CD controle avant destruction	Hash bcrypt du compte admin Argo CD, lu par bootstrap-management.sh et bootstrap-platform.sh.
+gitea-token	BLOCK	covered	~/.config/gitops-lab/gitea-git-token	Fichier de jeton present	Jeton Gitea git-push-wsl, aussi utilisé pour l'API Gitea. Non réaffichable : sa perte oblige à en recréer un dans Gitea.
+mirror-expiry	WARN	covered	~/.config/gitops-lab/github-mirror-token.env	PAT GitHub valide	Date d'échéance du PAT GitHub (jamais le PAT lui-même). Contrôlée par check-github-mirror.sh --check.
+gitea-backups	BLOCK	covered	~/.local/share/gitops-lab/backups/gitea	-	Jeux de sauvegarde Gitea, pris puis validés par le bootstrap juste avant la destruction. Ils contiennent la config du mirror, donc le PAT GitHub : sensibles.
+#
+# --- Contrôles manuels (non vérifiables par script) ---
+ca-archive-offsite	BLOCK	manual	gitops-lab-root-ca.tar.age	-	Copie de l'archive de la CA hors de cette machine, et conservation de sa passphrase ou de son identité age hors du dossier de config.
+sealed-key-offsite	BLOCK	manual	sealed-secrets-keyx9rjr-2026-09-29.yaml	-	Copie de la clé Sealed Secrets hors de cette machine (à confirmer).
+github-pat-vault	WARN	manual	gestionnaire de mots de passe	-	Le PAT GitHub n'existe que dans la config du mirror Gitea et dans le gestionnaire de mots de passe.
+#
+# --- Contrôlés par check-external-deps.sh ---
+config-dir-mode	WARN	path	~/.config/gitops-lab	700	Dossier des secrets, de la CA et des clés.
+backups-dir-mode	WARN	path	~/.local/share/gitops-lab/backups/gitea	700	Les jeux de sauvegarde contiennent le PAT GitHub.
+logs-dir-mode	INFO	path	~/.local/share/gitops-lab/logs	700	Journaux des PRA.
+backups-disk-free	INFO	disk-free	~/.local/share/gitops-lab/backups/gitea	1024	Espace libre minimal en Mo (un jeu complet occupe environ 26 Mo).
+ca-trust-wsl	WARN	ca-trust	~/.config/gitops-lab/gitops-lab-root-ca.crt	-	CA du lab dans le magasin de confiance WSL ; sinon git et curl refusent le certificat de gitea.local.
+ca-archive-fresh	WARN	file-newer	~/.config/gitops-lab/gitops-lab-root-ca.tar.age	~/.config/gitops-lab/gitops-lab-root-ca.crt	Archive de la CA au moins aussi récente que le certificat.
+hosts-argocd	WARN	hosts	argocd.local	127.0.0.1	Entrée du hosts Windows pour Argo CD (accès navigateur).
+hosts-traefik	WARN	hosts	traefik.local	127.0.0.1	Entrée du hosts Windows pour Traefik (accès navigateur).
+hosts-gitea	WARN	hosts	gitea.local	127.0.0.1	Entrée du hosts Windows pour Gitea (aussi résolu côté cluster : voir cadrage v1.3.2) (accès navigateur).
+hosts-whoami-dev	WARN	hosts	whoami.dev.local	127.0.0.1	Entrée du hosts Windows pour whoami, cluster dev (accès navigateur).
+hosts-whoami-prod	WARN	hosts	whoami.prod.local	127.0.0.1	Entrée du hosts Windows pour whoami, cluster prod (accès navigateur).
+hosts-2048-dev	WARN	hosts	2048.dev.local	127.0.0.1	Entrée du hosts Windows pour 2048, cluster dev (accès navigateur).
+hosts-2048-prod	WARN	hosts	2048.prod.local	127.0.0.1	Entrée du hosts Windows pour 2048, cluster prod (accès navigateur).
+cli-tools	WARN	cmd	kubectl,kind,helm,kubeseal,jq,git,docker,openssl,curl	-	Outils du poste, hors Git (kubeseal est installé par bootstrap-workstation.sh).
+external-chart-repos	INFO	argocd-repos	argocd	-	Dépôts de charts externes déclarés dans les Applications : dépendances du PRA hors Gitea.
