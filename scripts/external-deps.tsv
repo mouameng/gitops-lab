@@ -39,3 +39,4 @@ hosts-2048-dev	WARN	hosts	2048.dev.local	127.0.0.1	Entrée du hosts Windows pour
 hosts-2048-prod	WARN	hosts	2048.prod.local	127.0.0.1	Entrée du hosts Windows pour 2048, cluster prod (accès navigateur).
 cli-tools	WARN	cmd	kubectl,kind,helm,kubeseal,jq,git,docker,openssl,curl	-	Outils du poste, hors Git (kubeseal est installé par bootstrap-workstation.sh).
 external-chart-repos	INFO	argocd-repos	argocd	-	Dépôts de charts externes déclarés dans les Applications : dépendances du PRA hors Gitea.
+gitea-registry-token	WARN	path	~/.config/gitops-lab/gitea-registry-publish.token	600	Jeton de publication du registre Gitea (CI v1.3.3), portée package en écriture, jamais affiché. Sa perte oblige à en recréer un dans Gitea ; il ne bloque pas le PRA.
