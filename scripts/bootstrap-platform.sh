@@ -258,6 +258,30 @@ echo "[OK] Branche main alignée avec le dépôt distant"
 MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea-publish.sh" --check
 MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/install-gitea-direct.sh" --render-check
 
+# Dépôt de secours GitHub : contrôle seul (aucune écriture, aucune question).
+# La décision (profil lab / exploit) est prise plus bas, après confirmation du PRA.
+MIRROR_PROFILE="${MIRROR_PROFILE:-lab}"
+case "$MIRROR_PROFILE" in
+    lab|exploit) ;;
+    *)
+        echo "[STOP] MIRROR_PROFILE invalide : $MIRROR_PROFILE (attendu : lab ou exploit)" >&2
+        exit 1
+        ;;
+esac
+MIRROR_CHECK_SCRIPT="${ROOT_DIR}/scripts/check-github-mirror.sh"
+[[ -f "$MIRROR_CHECK_SCRIPT" && -x "$MIRROR_CHECK_SCRIPT" ]] || {
+    echo "[STOP] Script absent ou non exécutable : $MIRROR_CHECK_SCRIPT" >&2
+    exit 1
+}
+mirror_status=0
+"$MIRROR_CHECK_SCRIPT" --check || mirror_status=$?
+case "$mirror_status" in
+    0) echo "[OK] Dépôt de secours GitHub conforme (profil $MIRROR_PROFILE)" ;;
+    2) echo "[WARN] Dépôt de secours en avertissement ; traitement avant sauvegarde Gitea (profil $MIRROR_PROFILE)" ;;
+    3) echo "[WARN] Dépôt de secours critique ; remédiation requise avant destruction (profil $MIRROR_PROFILE)" ;;
+    *) echo "[WARN] Contrôle du dépôt de secours en erreur ($mirror_status) ; le PRA s'arrêtera avant destruction" ;;
+esac
+
 if ! git -C "$ROOT_DIR" diff --quiet ||
    ! git -C "$ROOT_DIR" diff --cached --quiet; then
     echo "[STOP] Fichiers Git suivis ou index déjà modifiés" >&2
@@ -401,6 +425,55 @@ if ((${#clusters_to_delete[@]} > 0)); then
     esac
 else
     echo "[OK] Aucun cluster du périmètre PRA à détruire ; confirmation inutile"
+fi
+
+# Dépôt de secours GitHub : remédiation selon le profil, AVANT la sauvegarde fraîche
+# de Gitea (la configuration du mirror est sauvegardée avec gitea.db).
+#   lab     : WARN/CRIT -> rotation lancée d'office ; arrêt si elle échoue ou reste critique.
+#   exploit : WARN -> proposition (60 s, défaut non, non bloquant) ;
+#             CRIT -> proposition sans délai, refus = annulation du PRA.
+#   erreur interne du contrôle : arrêt quel que soit le profil.
+if ((mirror_status != 0)); then
+    mirror_run_update=0
+    mirror_answer=""
+    case "${MIRROR_PROFILE}:${mirror_status}" in
+        lab:2|lab:3)
+            mirror_run_update=1
+            ;;
+        exploit:2)
+            read -r -t 60 -p "[WARN] Lancer la rotation du jeton du dépôt de secours ? [o/N] (60 s, défaut non) : " mirror_answer || mirror_answer=""
+            echo
+            [[ "$mirror_answer" =~ ^[oO]$ ]] && mirror_run_update=1
+            ;;
+        exploit:3)
+            read -r -p "[CRIT] Lancer la rotation du jeton du dépôt de secours ? [o/N] (refus = annulation du PRA) : " mirror_answer || mirror_answer=""
+            if [[ "$mirror_answer" =~ ^[oO]$ ]]; then
+                mirror_run_update=1
+            else
+                echo "[STOP] Remédiation refusée en état critique ; aucun cluster supprimé" >&2
+                exit 1
+            fi
+            ;;
+        *)
+            echo "[STOP] Contrôle du dépôt de secours en erreur ; aucun cluster supprimé" >&2
+            exit 1
+            ;;
+    esac
+
+    if ((mirror_run_update == 1)); then
+        mirror_update_rc=0
+        "$MIRROR_CHECK_SCRIPT" --update || mirror_update_rc=$?
+        mirror_final_rc=0
+        "$MIRROR_CHECK_SCRIPT" --check || mirror_final_rc=$?
+        if ((mirror_update_rc != 0 || (mirror_final_rc != 0 && mirror_final_rc != 2))); then
+            echo "[STOP] Remédiation du dépôt de secours en échec ; aucun cluster supprimé" >&2
+            exit 1
+        fi
+        echo "[OK] Dépôt de secours GitHub traité avant sauvegarde Gitea"
+    else
+        echo "[WARN] Rotation non lancée (refus ou délai écoulé) ; PRA poursuivi avec avertissement"
+    fi
+    unset mirror_run_update mirror_answer mirror_update_rc mirror_final_rc
 fi
 
 # Choisir et figer le jeu Gitea avant toute destruction.
