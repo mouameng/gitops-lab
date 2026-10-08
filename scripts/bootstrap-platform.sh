@@ -304,6 +304,19 @@ case "$external_deps_status" in
         ;;
 esac
 
+# DNS du cluster management : contrôle du rendu seul, sans accès au cluster
+# (script présent, outils, transformation du Corefile de référence).
+MGMT_DNS_SCRIPT="${ROOT_DIR}/scripts/configure-management-dns.sh"
+[[ -f "$MGMT_DNS_SCRIPT" && -x "$MGMT_DNS_SCRIPT" ]] || {
+    echo "[STOP] Script absent ou non exécutable : $MGMT_DNS_SCRIPT" >&2
+    exit 1
+}
+"$MGMT_DNS_SCRIPT" --render-check >/dev/null || {
+    echo "[STOP] Contrôle de rendu du DNS management en échec : $MGMT_DNS_SCRIPT --render-check" >&2
+    exit 1
+}
+echo "[OK] DNS du management : script et rendu conformes (aucun accès au cluster)"
+
 if ! git -C "$ROOT_DIR" diff --quiet ||
    ! git -C "$ROOT_DIR" diff --cached --quiet; then
     echo "[STOP] Fichiers Git suivis ou index déjà modifiés" >&2
@@ -569,6 +582,15 @@ done < "$INVENTORY"
 # Accès des nœuds workload au registre Gitea (résolution, CA, hosts.toml).
 # Une seule fois, après création de tous les workloads ; rejouable seul.
 bash "${ROOT_DIR}/scripts/configure-workload-registry.sh"
+
+# DNS du cluster management : gitea.local -> Service Traefik pour les pods, le DinD et les jobs CI.
+# Le Corefile par défaut de Kind est recréé avec le cluster : l'entrée est donc rejouée à chaque PRA.
+# Un échec n'arrête pas la reconstruction (le DNS ne sert qu'à la CI) ; rejouable seul.
+if MGMT_CONTEXT=kind-gitops-management bash "${ROOT_DIR}/scripts/configure-management-dns.sh" --apply; then
+    echo "[OK] DNS du management : gitea.local -> Service Traefik"
+else
+    echo "[WARN] DNS du management non appliqué ; rejouer : bash scripts/configure-management-dns.sh --apply" >&2
+fi
 
 # Installer Argo CD sur le management recréé, sans activer la Root App.
 CLUSTER_NAME=gitops-management \
