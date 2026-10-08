@@ -17,6 +17,8 @@ gitea:
     existingSecret: gitea-admin-secret
     passwordMode: initialOnlyNoReset
   config:
+    migrations:
+      ALLOWED_DOMAINS: "github.com"
     server:
       DOMAIN: gitea.local
       ROOT_URL: https://gitea.local/
