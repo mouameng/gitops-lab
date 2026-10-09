@@ -6,4 +6,4 @@ resources:
 images:
   # Source gitea_admin/2048 @ a6a3d34 ; digest de l'index OCI publié dans Gitea.
   - name: gitea.local/gitea_admin/2048
-    digest: sha256:7391ef3d981ab4b78193156a1671464f2938dccb2c923de907711037038d608d
+    digest: sha256:f39c5eb1b8d7cc0a2f727621185714b732e6fb9988d6254b39fe689ef17289ef
