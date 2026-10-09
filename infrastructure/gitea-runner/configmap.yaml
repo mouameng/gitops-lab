@@ -1,0 +1,26 @@
+apiVersion: v1
+data:
+  config.yaml: |
+    runner:
+      file: /data/.runner
+      capacity: 1
+      labels:
+        - "lab-node22:docker://node@sha256:0e5f906573693feaa1e21057ebdcfdb5bd5021f050b2dc7c9deceb629c7da2a8"
+        - "lab-docker:docker://docker@sha256:1a4c7cb63513f349bdad01fcc6e0f3f2f67d37b9da86f14dc0d4a0942eecda00"
+      timeout: 30m
+      shutdown_timeout: 30s
+      insecure: false
+
+    cache:
+      enabled: false
+
+    container:
+      docker_host: unix:///var/run/docker.sock
+      require_docker: true
+      docker_timeout: 60s
+      privileged: false
+      valid_volumes: []
+kind: ConfigMap
+metadata:
+  name: gitea-runner-config
+  namespace: gitea-runner

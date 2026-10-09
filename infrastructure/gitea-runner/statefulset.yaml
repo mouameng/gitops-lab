@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gitea-runner
+  namespace: gitea-runner
+spec:
+  serviceName: gitea-runner
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitea-runner
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gitea-runner
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: dind
+          image: docker.io/library/docker@sha256:1e08cdb63405ca788aea94ef35b792d1e299607c667d33d7bcbcae1fd2611ced
+          restartPolicy: Always
+          args:
+            - dockerd
+            - --host=unix:///var/run/docker.sock
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+          securityContext:
+            privileged: true
+          startupProbe:
+            exec:
+              command:
+                - docker
+                - --host=unix:///var/run/docker.sock
+                - info
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 36
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run
+            - name: docker-data
+              mountPath: /var/lib/docker
+            - name: lab-ca
+              mountPath: /etc/docker/certs.d/gitea.local
+              readOnly: true
+      containers:
+        - name: runner
+          image: docker.io/gitea/runner@sha256:66b7da94dc7dcadb2e076bec6928221336a9a637196399281c4b766fe1288242
+          env:
+            - name: CONFIG_FILE
+              value: /etc/gitea-runner/config.yaml
+            - name: GITEA_INSTANCE_URL
+              value: http://gitea-http.gitea.svc.cluster.local:3000
+            - name: GITEA_RUNNER_NAME
+              value: lab-games
+            - name: GITEA_RUNNER_REGISTRATION_TOKEN_FILE
+              value: /etc/gitea-runner-registration/token
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: docker-socket
+              mountPath: /var/run
+            - name: runner-config
+              mountPath: /etc/gitea-runner
+              readOnly: true
+            - name: registration
+              mountPath: /etc/gitea-runner-registration
+              readOnly: true
+      volumes:
+        - name: docker-socket
+          emptyDir: {}
+        - name: docker-data
+          emptyDir: {}
+        - name: runner-config
+          configMap:
+            name: gitea-runner-config
+        - name: registration
+          secret:
+            secretName: gitea-runner-registration
+            defaultMode: 0400
+        - name: lab-ca
+          configMap:
+            name: gitea-runner-ca
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 1Gi

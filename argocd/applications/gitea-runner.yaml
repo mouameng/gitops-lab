@@ -1,0 +1,21 @@
+# argocd/applications/gitea-runner.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitea-runner
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "120"
+spec:
+  project: infrastructure
+  source:
+    repoURL: http://gitea-http.gitea.svc.cluster.local:3000/gitea_admin/gitops-lab.git
+    targetRevision: main
+    path: infrastructure/gitea-runner
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitea-runner
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
