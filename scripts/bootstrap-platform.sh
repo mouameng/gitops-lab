@@ -304,6 +304,31 @@ case "$external_deps_status" in
         ;;
 esac
 
+# Sauvegarde Git des dépôts inventoriés : découverte et contrôle seuls.
+# Aucun push n'est effectué pendant le prévol.
+GIT_BACKUP_SCRIPT="${ROOT_DIR}/scripts/backup-git-repositories.sh"
+GIT_BACKUP_MANIFEST="${ROOT_DIR}/scripts/git-backup-repositories.tsv"
+
+[[ -f "$GIT_BACKUP_SCRIPT" &&
+   -x "$GIT_BACKUP_SCRIPT" &&
+   ! -L "$GIT_BACKUP_SCRIPT" ]] || {
+    echo "[STOP] Script de sauvegarde Git absent ou invalide : $GIT_BACKUP_SCRIPT" >&2
+    exit 1
+}
+
+[[ -f "$GIT_BACKUP_MANIFEST" &&
+   ! -L "$GIT_BACKUP_MANIFEST" ]] || {
+    echo "[STOP] Inventaire des sauvegardes Git absent ou invalide : $GIT_BACKUP_MANIFEST" >&2
+    exit 1
+}
+
+"$GIT_BACKUP_SCRIPT" --preflight || {
+    echo "[STOP] Prévol des sauvegardes Git en échec ; PRA non autorisé" >&2
+    exit 1
+}
+
+echo "[OK] Dépôts Git à sauvegarder inventoriés et destinations accessibles"
+
 # DNS du cluster management : contrôle du rendu seul, sans accès au cluster
 # (script présent, outils, transformation du Corefile de référence).
 MGMT_DNS_SCRIPT="${ROOT_DIR}/scripts/configure-management-dns.sh"
@@ -515,13 +540,23 @@ fi
 GITEA_BACKUP_SCRIPT="${ROOT_DIR}/scripts/backup-gitea.sh"
 
 if grep -Fxq -- gitops-management <<< "$existing_clusters"; then
+    echo "[INFO] Sauvegarde Git fraiche des depots inventories avant destruction"
+
+    "$GIT_BACKUP_SCRIPT" --sync || {
+        echo "[STOP] Sauvegarde Git des depots inventories en echec ; aucun cluster supprime" >&2
+        exit 1
+    }
+
+    echo "[OK] Depots Git inventories synchronises vers GitHub"
+
     echo "[INFO] Sauvegarde fraiche de Gitea avant destruction"
 
     gitea_backup_output="$(
         bash "$GITEA_BACKUP_SCRIPT" --backup
     )"
 else
-    echo "[INFO] Management absent ; selection du dernier jeu valide"
+    echo "[WARN] Management absent ; sauvegarde Git fraiche impossible"
+    echo "[INFO] Selection du dernier jeu Gitea valide"
 
     gitea_backup_output="$(
         bash "$GITEA_BACKUP_SCRIPT" --latest

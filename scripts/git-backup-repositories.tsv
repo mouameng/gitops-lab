@@ -1,0 +1,2 @@
+# id	status	gitea_owner	gitea_repo	github_owner	github_repo	refs
+games-2048	REQUIRED	games	2048	mouameng	games-2048	heads-tags

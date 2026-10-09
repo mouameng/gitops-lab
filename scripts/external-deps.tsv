@@ -15,7 +15,8 @@ argocd-manifest	BLOCK	covered	~/.config/gitops-lab/pra-isolated/argocd-v3.5.3-in
 ca-cert	BLOCK	covered	~/.config/gitops-lab/gitops-lab-root-ca.crt	Paire CA locale validée avant destruction	Certificat de la CA privée du lab ; le PRA recrée le Secret gitops-lab-root-ca à partir de la paire.
 ca-key	BLOCK	covered	~/.config/gitops-lab/gitops-lab-root-ca.key	Paire CA locale validée avant destruction	Clé privée de la CA. Sa perte impose une nouvelle CA et la réémission de tous les certificats.
 argocd-admin-hash	BLOCK	covered	~/.config/gitops-lab/argocd-admin-password.bcrypt	Hash administrateur Argo CD controle avant destruction	Hash bcrypt du compte admin Argo CD, lu par bootstrap-management.sh et bootstrap-platform.sh.
-gitea-token	BLOCK	covered	~/.config/gitops-lab/gitea-git-token	Fichier de jeton present	Jeton Gitea git-push-wsl, aussi utilisé pour l'API Gitea. Non réaffichable : sa perte oblige à en recréer un dans Gitea.
+gitea-token	BLOCK	covered	~/.config/gitops-lab/gitea-git-token	Fichier de jeton present	Jeton Gitea git-push-wsl utilisé pour les opérations Git depuis WSL. Non réaffichable : sa perte oblige à en recréer un dans Gitea.
+gitea-repository-discovery-token	BLOCK	path	~/.config/gitops-lab/gitea-repository-discovery.token	600	Jeton Gitea en lecture seule avec la portée read:organization, utilisé par le prévol pour détecter les dépôts non inventoriés. Son absence bloque le PRA avant le menu.
 mirror-expiry	WARN	covered	~/.config/gitops-lab/github-mirror-token.env	PAT GitHub valide	Date d'échéance du PAT GitHub (jamais le PAT lui-même). Contrôlée par check-github-mirror.sh --check.
 gitea-backups	BLOCK	covered	~/.local/share/gitops-lab/backups/gitea	-	Jeux de sauvegarde Gitea, pris puis validés par le bootstrap juste avant la destruction. Ils contiennent la config du mirror, donc le PAT GitHub : sensibles.
 #
