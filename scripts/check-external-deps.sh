@@ -27,7 +27,7 @@ SYSTEM_CA_BUNDLE="${SYSTEM_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
 URL_TIMEOUT="${URL_TIMEOUT:-5}"
 
 VALID_LEVELS=" BLOCK WARN INFO "
-VALID_CHECKS=" covered manual path file-newer hosts ca-trust disk-free cmd argocd-repos "
+VALID_CHECKS=" covered manual path file-newer hosts ca-trust disk-free cmd argocd-repos registry-digests "
 
 E_ID=(); E_LEVEL=(); E_CHECK=(); E_TARGET=(); E_EXPECTED=(); E_NOTE=()
 OK_N=0; WARN_N=0; CRIT_N=0; COUV_N=0; MAN_N=0
@@ -207,6 +207,86 @@ check_url() {
   fi
 }
 
+check_registry_digests() {
+  local rel="$1" token_file="$2"
+  local root="${ROOT_DIR}/${rel}"
+  local registry="${REGISTRY_BASE_URL:-https://gitea.local}"
+  local acc='application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'
+  local f image digest repo headers code got
+  local checked=0 failed=0
+  local -a failures=()
+
+  if (( OFFLINE == 1 )); then
+    MSG="digests du registre ignorés (--offline) : ${rel}"
+    return 3
+  fi
+
+  command -v curl >/dev/null 2>&1 || {
+    MSG="curl absent : digests du registre non vérifiés"
+    return 2
+  }
+
+  token_file="$(expand_path "$token_file")"
+  [[ -f "$token_file" && ! -L "$token_file" && -r "$token_file" ]] || {
+    MSG="jeton du registre absent, illisible ou lien : $2"
+    return 2
+  }
+
+  [[ -d "$root" ]] || {
+    MSG="dossier des overlays absent : $rel"
+    return 2
+  }
+
+  while IFS= read -r -d '' f; do
+    image="$(
+      grep -m1 -E '^[[:space:]]*-[[:space:]]*name:[[:space:]]*gitea\.local/' "$f" |
+        sed -E 's#^[[:space:]]*-[[:space:]]*name:[[:space:]]*gitea\.local/##' ||
+        true
+    )"
+
+    digest="$(
+      grep -m1 -E '^[[:space:]]*digest:[[:space:]]*sha256:[0-9a-f]{64}$' "$f" |
+        sed -E 's#^[[:space:]]*digest:[[:space:]]*##' ||
+        true
+    )"
+
+    [[ -n "$image" && -n "$digest" ]] || continue
+    checked=$((checked + 1))
+    repo="${image#/}"
+
+    headers="$(
+      printf 'user = "gitea_admin:%s"\n' "$(cat "$token_file")" |
+        curl -sS -K - --max-time "$URL_TIMEOUT" \
+          -D - -o /dev/null \
+          -H "Accept: $acc" \
+          "${registry}/v2/${repo}/manifests/${digest}" 2>/dev/null |
+        tr -d '\r'
+    )"
+
+    code="$(head -n1 <<<"$headers" | awk '{print $2}')"
+    got="$(grep -i '^docker-content-digest:' <<<"$headers" |
+      awk '{print $2; exit}')"
+
+    if [[ "$code" != "200" || "$got" != "$digest" ]]; then
+      failed=$((failed + 1))
+      failures+=("$(realpath --relative-to="$ROOT_DIR" "$f")=${digest:0:19} http=${code:-aucun}")
+    fi
+  done < <(find "$root" -type f -name kustomization.yaml -print0 | sort -z)
+
+  if (( checked == 0 )); then
+    MSG="aucun digest OCI Gitea trouvé dans ${rel}"
+    return 2
+  fi
+
+  if (( failed > 0 )); then
+    MSG="${failed}/${checked} digest(s) absent(s) ou incohérent(s) : ${failures[*]}"
+    return 1
+  fi
+
+  MSG="${checked} digest(s) OCI référencé(s) servi(s) dans ${rel}"
+  return 0
+}
+
 # Hôtes https externes déclarés comme repoURL dans le dossier $1 du dépôt.
 external_repo_hosts() {
   local d="${ROOT_DIR}/$1"
@@ -281,6 +361,10 @@ do_check() {
         check_disk_free "$target" "$expected"; dispatch $? "$level" ;;
       cmd)
         check_cmd "$target"; dispatch $? "$level" ;;
+      registry-digests)
+        check_registry_digests "$target" "$expected"
+        dispatch $? "$level"
+        ;;
       argocd-repos)
         if ! urls="$(external_repo_hosts "$target")"; then
           report info "$level" "dossier $target absent du dépôt : dépôts de charts non listés"

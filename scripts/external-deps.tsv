@@ -6,6 +6,7 @@
 #            manual (non vérifiable par script) | path (existence, non vide, mode octal attendu) | file-newer (cible >= fichier attendu)
 #            hosts (cible = nom, attendu = IP) | ca-trust (cible = certificat) | disk-free (cible = dossier, attendu = Mo)
 #            cmd (cible = outils séparés par des virgules) | argocd-repos (cible = dossier du dépôt contenant les repoURL)
+#            registry-digests (cible = dossier des overlays, attendu = fichier du jeton du registre)
 # Ajouter un élément hors Git = ajouter une ligne ici, dans le même commit.
 #
 # --- Couverts par une garde existante du bootstrap (non réévalués ici) ---
@@ -42,3 +43,4 @@ external-chart-repos	INFO	argocd-repos	argocd	-	Dépôts de charts externes déc
 gitea-registry-token	WARN	path	~/.config/gitops-lab/gitea-registry-publish.token	600	Jeton de publication du registre Gitea (CI v1.3.3), portée package en écriture, jamais affiché. Sa perte oblige à en recréer un dans Gitea ; il ne bloque pas le PRA.
 gitea-ci-token	WARN	path	~/.config/gitops-lab/gitea-ci-gitops-write.token	600	Jeton du compte ci-bot (CI v1.3.3), ecriture sur le seul depot gitops-lab, jamais affiche. Sa perte oblige a en recreer un dans Gitea ; il ne bloque pas le PRA.
 gitea-runner-registration-token	WARN	path	~/.config/gitops-lab/gitea-runner-registration.token	600	Jeton d'enregistrement du runner de l'organisation games (CI v1.3.3), jamais affiché. Sa perte oblige à relire un jeton dans Gitea (organisation games, Actions, Runners) pour resceller le Secret ; il ne bloque pas le PRA.
+gitops-registry-digests	WARN	registry-digests	applications	~/.config/gitops-lab/gitea-registry-publish.token	Vérifie que chaque digest OCI référencé par un overlay est encore servi par le registre Gitea ; avertissement non bloquant pour le PRA.
