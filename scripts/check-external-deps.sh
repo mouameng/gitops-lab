@@ -50,6 +50,7 @@ expand_path() {
   p="${p/#\$HOME/$HOME}"
   p="${p/#\$\{LAB_CONFIG_DIR\}/$LAB_CONFIG_DIR}"
   p="${p/#\$\{LAB_DATA_DIR\}/$LAB_DATA_DIR}"
+  p="${p/#\$\{LAB_LOG_DIR\}/$LAB_LOG_DIR}"
   printf '%s' "$p"
 }
 
