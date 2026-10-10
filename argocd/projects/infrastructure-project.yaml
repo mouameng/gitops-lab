@@ -8,7 +8,7 @@ metadata:
 spec:
   description: Composants d'infrastructure des clusters geres
   sourceRepos:
-    - http://gitea-http.gitea.svc.cluster.local:3000/gitea_admin/gitops-lab.git
+    - http://gitea-http.gitea.svc.cluster.local:3000/platform/infrastructure-devops.git
     - https://kubernetes.github.io/ingress-nginx
     - https://metallb.github.io/metallb
     - https://bitnami.github.io/sealed-secrets

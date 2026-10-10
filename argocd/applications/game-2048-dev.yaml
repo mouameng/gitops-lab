@@ -7,7 +7,7 @@ spec:
   project: applications
 
   source:
-    repoURL: http://gitea-http.gitea.svc.cluster.local:3000/gitea_admin/gitops-lab.git
+    repoURL: http://gitea-http.gitea.svc.cluster.local:3000/platform/infrastructure-devops.git
     targetRevision: HEAD
     path: applications/games/2048/overlays/dev
 

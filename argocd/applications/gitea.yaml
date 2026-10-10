@@ -13,7 +13,7 @@ spec:
         releaseName: gitea
         valueFiles:
           - $values/infrastructure/gitea/values.yaml
-    - repoURL: http://gitea-http.gitea.svc.cluster.local:3000/gitea_admin/gitops-lab.git
+    - repoURL: http://gitea-http.gitea.svc.cluster.local:3000/platform/infrastructure-devops.git
       targetRevision: main
       ref: values
   destination:
