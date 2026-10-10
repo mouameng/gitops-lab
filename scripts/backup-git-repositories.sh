@@ -319,6 +319,8 @@ sync_repositories() {
   local github_owner github_repo refs
   local source destination source_url destination_url repo_dir
   local source_refs destination_refs
+  local token_file="${GITEA_GIT_TOKEN_FILE:-${LAB_CONFIG_DIR}/gitea-git-token}"
+  local askpass=""
   local errors=0
   local synced=0
   local warnings=0
@@ -330,6 +332,14 @@ sync_repositories() {
     return 1
   fi
 
+  [[ -f "$token_file" &&
+     ! -L "$token_file" &&
+     -s "$token_file" &&
+     "$(stat -c '%a' "$token_file")" == "600" ]] || {
+    printf '[STOP] Jeton Git Gitea absent ou invalide : %s\n'       "$token_file" >&2
+    return 1
+  }
+
   temp_root="$(mktemp -d "${TMPDIR:-/tmp}/git-backup-sync.XXXXXXXX")" || {
     printf '[STOP] Impossible de créer le répertoire temporaire\n' >&2
     return 1
@@ -337,7 +347,24 @@ sync_repositories() {
 
   chmod 700 "$temp_root"
 
+  askpass="$temp_root/gitea-askpass.sh"
+
+  cat > "$askpass" <<EOF
+#!/bin/sh
+case "\$1" in
+  Username*) printf '%s\n' 'gitea_admin' ;;
+  *) cat '$token_file' ;;
+esac
+EOF
+
+  chmod 700 "$askpass"
+
+  gitea_git() {
+    GIT_ASKPASS="$askpass"     GIT_TERMINAL_PROMPT=0       git -c credential.helper= "$@"
+  }
+
   echo "[INFO] Répertoire temporaire créé"
+  echo "[OK] Authentification Git Gitea temporaire préparée"
 
   while IFS=$'\t' read -r id status gitea_owner gitea_repo \
                                github_owner github_repo refs; do
@@ -352,8 +379,8 @@ sync_repositories() {
     printf '[INFO] Synchronisation : %s -> %s\n' \
       "$source" "$destination"
 
-    if ! GIT_TERMINAL_PROMPT=0 \
-         git ls-remote "$source_url" HEAD >/dev/null 2>&1; then
+    if ! gitea_git \
+         ls-remote "$source_url" HEAD >/dev/null 2>&1; then
       printf '[STOP] Source Gitea inaccessible : %s\n' "$source" >&2
       ((errors += 1))
       continue
@@ -380,8 +407,8 @@ sync_repositories() {
       continue
     fi
 
-    if ! GIT_TERMINAL_PROMPT=0 \
-         git clone --bare "$source_url" "$repo_dir"; then
+    if ! gitea_git \
+         clone --bare "$source_url" "$repo_dir"; then
       printf '[STOP] Clone bare en échec : %s\n' "$source" >&2
       ((errors += 1))
       rm -rf "$repo_dir"
@@ -407,8 +434,8 @@ sync_repositories() {
     fi
 
     if ! source_refs="$(
-      GIT_TERMINAL_PROMPT=0 \
-        git ls-remote --heads --tags "$source_url" |
+      gitea_git \
+        ls-remote --heads --tags "$source_url" |
         LC_ALL=C sort
     )"; then
       printf '[STOP] Relecture Gitea en échec : %s\n' "$source" >&2
