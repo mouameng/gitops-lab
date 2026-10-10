@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 DEFAULT_MANIFEST="$SCRIPT_DIR/git-backup-repositories.tsv"
 MANIFEST="${GIT_BACKUP_MANIFEST:-$DEFAULT_MANIFEST}"
+GITEA_GIT_BASE_URL="${GITEA_GIT_BASE_URL:-https://gitea.local}"
 
 usage() {
   cat <<'USAGE'
@@ -344,7 +345,7 @@ sync_repositories() {
 
     source="$gitea_owner/$gitea_repo"
     destination="$github_owner/$github_repo"
-    source_url="https://gitea.local/${source}.git"
+    source_url="${GITEA_GIT_BASE_URL}/${source}.git"
     destination_url="git@github.com:${destination}.git"
     repo_dir="$temp_root/$id.git"
 
