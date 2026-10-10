@@ -131,6 +131,15 @@ elif (($# != 0)); then
     echo "[STOP] Argument invalide" >&2
     usage >&2
     exit 1
+else
+    LAB_RECOVERY_MODE="pra"
+
+    lab_log_start \
+        "$LAB_RECOVERY_MODE" \
+        "$(git -C "$ROOT_DIR" rev-parse HEAD)" \
+        "lab-recovery" || exit 1
+
+    trap lab_recovery_log_on_exit EXIT
 fi
 
 echo "=================================================="
