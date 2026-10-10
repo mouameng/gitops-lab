@@ -4,6 +4,6 @@ resources:
   - ../../base
   - ingress.yaml
 images:
-  # Source gitea_admin/2048 @ fb6a4af ; digest de l'index OCI publié dans Gitea.
-  - name: gitea.local/gitea_admin/2048
+  # Source games/2048 @ fb6a4af ; digest de l'index OCI publié dans Gitea.
+  - name: gitea.local/games/2048
     digest: sha256:12ff0073e6c68913018931ef497a137888ce365b960a00efae6317df1fb684f8

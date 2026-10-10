@@ -18,13 +18,15 @@ spec:
         app.kubernetes.io/part-of: games
     spec:
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: games-registry-pull
       securityContext:
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: game-2048
           # Référence sans tag ni digest : chaque overlay fixe le digest (images:).
-          image: gitea.local/gitea_admin/2048
+          image: gitea.local/games/2048
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
