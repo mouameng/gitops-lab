@@ -15,12 +15,89 @@ ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
     exit 1
 }
 
+GITEA_RECOVERY_PORT="${GITEA_RECOVERY_PORT:-13001}"
+GITEA_RECOVERY_PF_PID=""
+
+lab_recovery_stop_gitea_channel() {
+    if [[ -n "$GITEA_RECOVERY_PF_PID" ]]; then
+        kill "$GITEA_RECOVERY_PF_PID" 2>/dev/null || true
+        wait "$GITEA_RECOVERY_PF_PID" 2>/dev/null || true
+        GITEA_RECOVERY_PF_PID=""
+        echo "[OK] Canal de reprise Gitea fermé"
+    fi
+
+    unset \
+        GITEA_URL \
+        GITEA_API_URL \
+        GITEA_GIT_BASE_URL \
+        REGISTRY_BASE_URL
+}
+
+lab_recovery_start_gitea_channel() {
+    local ready=0
+    local attempt
+
+    [[ -z "$GITEA_RECOVERY_PF_PID" ]] || return 0
+
+    if ss -ltn "( sport = :${GITEA_RECOVERY_PORT} )" |
+       grep -q LISTEN; then
+        echo "[STOP] Port de reprise déjà utilisé : $GITEA_RECOVERY_PORT" >&2
+        return 1
+    fi
+
+    kubectl --context "${MGMT_CONTEXT:-kind-gitops-management}" \
+        -n gitea port-forward \
+        --address 127.0.0.1 \
+        deployment/gitea \
+        "${GITEA_RECOVERY_PORT}:3000" >/dev/null 2>&1 &
+
+    GITEA_RECOVERY_PF_PID=$!
+
+    for attempt in {1..30}; do
+        if ! kill -0 "$GITEA_RECOVERY_PF_PID" 2>/dev/null; then
+            echo "[STOP] Canal de reprise Gitea interrompu" >&2
+            GITEA_RECOVERY_PF_PID=""
+            return 1
+        fi
+
+        if curl -fsS \
+            "http://127.0.0.1:${GITEA_RECOVERY_PORT}/api/healthz" \
+            >/dev/null 2>&1; then
+            ready=1
+            break
+        fi
+
+        sleep 1
+    done
+
+    if ((ready != 1)); then
+        echo "[STOP] Gitea indisponible sur le canal de reprise" >&2
+        lab_recovery_stop_gitea_channel
+        return 1
+    fi
+
+    GITEA_URL="http://127.0.0.1:${GITEA_RECOVERY_PORT}"
+    GITEA_API_URL="${GITEA_URL}/api/v1"
+    GITEA_GIT_BASE_URL="$GITEA_URL"
+    REGISTRY_BASE_URL="$GITEA_URL"
+
+    export \
+        GITEA_URL \
+        GITEA_API_URL \
+        GITEA_GIT_BASE_URL \
+        REGISTRY_BASE_URL
+
+    echo "[OK] Canal de reprise Gitea actif : 127.0.0.1:${GITEA_RECOVERY_PORT}"
+}
+
 lab_recovery_log_on_exit() {
     local rc=$?
     local finish_rc=0
 
     trap - EXIT INT TERM
     set +e
+
+    lab_recovery_stop_gitea_channel
 
     if [[ "${LAB_LOG_ACTIVE:-0}" == "1" &&
           "${LAB_LOG_OWNER_PID:-}" == "$$" ]]; then
@@ -353,6 +430,11 @@ MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" \
 echo "[OK] Branche main strictement alignée avec Gitea par le canal de reprise"
 MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea/install-direct.sh" --render-check
 
+lab_recovery_start_gitea_channel || {
+    echo "[STOP] Ouverture du canal de reprise Gitea impossible" >&2
+    exit 1
+}
+
 # Dépôt de secours GitHub : contrôle seul (aucune écriture, aucune question).
 # La décision (profil lab / exploit) est prise plus bas, après confirmation du PRA.
 MIRROR_PROFILE="${MIRROR_PROFILE:-lab}"
@@ -640,6 +722,8 @@ if grep -Fxq -- gitops-management <<< "$existing_clusters"; then
     }
 
     echo "[OK] Depots Git inventories synchronises vers GitHub"
+
+    lab_recovery_stop_gitea_channel
 
     echo "[INFO] Sauvegarde fraiche de Gitea avant destruction"
 
