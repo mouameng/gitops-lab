@@ -49,6 +49,7 @@ Résultat :
 - **Niveau BLOCK provisoire** pour le jeton dans l'inventaire (voir section 12).
 - **Workflow commun futur :** dépôt games/ci-workflows, fichier .gitea/scoped_workflows/games-ci.yaml (chemin standard Gitea). L'écran Scoped Workflows existe dans les paramètres de l'organisation sur Gitea 1.27.0 ; la détection et l'exécution d'un workflow central n'ont pas été testées.
 - **Nomenclature locale décidée, non appliquée :** ~/.config/lab et ~/.local/share/lab remplaceront les dossiers gitops-lab. Les termes infrastructure ou platform ne seront utilisés que pour des objets relatifs à l'infrastructure de la plateforme.
+- **Documents antérieurs renommés** avec le préfixe lab- (contenu inchangé, 12 renommages R100, commit 5a942aa). Une recherche des motifs gitops-lab-v… et gitops-lab-PRA dans les fichiers suivis n'a trouvé aucune référence à d'anciens noms. Convention : lab-vX.Y.Z-cloturee-AAAA-MM-JJ.md.
 
 ### 4. Commits de référence
 
@@ -166,7 +167,7 @@ Confirmé par le PRA :
 1. **Renommage des dossiers locaux** vers ~/.config/lab et ~/.local/share/lab : inventaire des occurrences de gitops-lab par famille, vérification du helper Git Gitea, un commit, un PRA. Identifiants dans les clusters (kind-gitops-*, CA) traités à part avec le chantier DNS et PKI.
 2. **Journalisation automatique du bootstrap** vers le nouveau dossier de journaux : relance sous script pour le mode complet uniquement, garde contre la relance infinie, umask 077, tests du menu interactif, du code retour et de Ctrl+C.
 3. **Mutualisation de la CI games :** ci/test.sh utilisé par le workflow, scripts/games (games.tsv, release-dev.sh, promote-prod.sh), workflow commun games/ci-workflows (scoped workflows à tester), ajout de Snake et Hextris.
-4. **Accès privé au socle platform et aux copies GitHub :** identifiants Git d'Argo CD restaurés avant cluster-registration, accès authentifié testé avant de retirer l'accès anonyme, vérification du push mirror et de la sauvegarde Games avec des dépôts GitHub privés. Le Secret Sealed Secrets est installé depuis un chart Helm public, sans dépendance au dépôt privé.
+4. **Accès privé au socle platform et aux copies GitHub :** identifiants Git d'Argo CD restaurés avant cluster-registration, accès authentifié testé avant de retirer l'accès anonyme, vérification du push mirror et de la sauvegarde Git de games avec des dépôts GitHub privés. Le contrôleur Sealed Secrets est installé depuis un chart Helm public, sans dépendance au dépôt privé.
 5. **CI de l'organisation platform.**
 6. **Nettoyage** de l'ancien package gitea_admin/2048 et des workflows historiques.
 7. **Correctif de l'ordre de démarrage** (certificat gitea.local avant le déploiement de game-2048), avec le chantier DNS et PKI.
