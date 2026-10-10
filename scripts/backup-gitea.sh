@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
-BACKUP_DIR="${GITEA_BACKUP_DIR:-$HOME/.local/share/gitops-lab/backups/gitea}"
+BACKUP_DIR="${GITEA_BACKUP_DIR:-${LAB_GITEA_BACKUP_DIR}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 READER_MANIFEST="$SCRIPT_DIR/manifests/gitea-backup-reader.yaml"
 

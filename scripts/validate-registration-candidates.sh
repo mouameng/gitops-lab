@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 MGMT_CONTEXT="${MGMT_CONTEXT:?Definir MGMT_CONTEXT explicitement}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INVENTORY="$ROOT_DIR/clusters/workloads.tsv"
-CANDIDATE_DIR="${CANDIDATE_DIR:-$HOME/.config/gitops-lab/registration-candidates}"
+CANDIDATE_DIR="${CANDIDATE_DIR:-${LAB_REGISTRATION_CANDIDATES_DIR}}"
 
 [[ -f "$INVENTORY" && -d "$CANDIDATE_DIR" ]] || {
   echo "[ERROR] Inventaire ou répertoire candidat absent" >&2

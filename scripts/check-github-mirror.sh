@@ -20,13 +20,14 @@
 # en masqué et ne l'écrit que dans un fichier temporaire 600, supprimé en sortie.
 
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 GITEA_URL="${GITEA_URL:-https://gitea.local}"
 GITEA_OWNER="${GITEA_OWNER:-platform}"
 GITEA_REPO="${GITEA_REPO:-infrastructure-devops}"
 GITHUB_URL="${GITHUB_URL:-https://github.com/mouameng/infrastructure-devops.git}"
-GITEA_TOKEN_FILE="${GITEA_GIT_TOKEN_FILE:-$HOME/.config/gitops-lab/gitea-git-token}"
-EXPIRY_FILE="${GITHUB_MIRROR_EXPIRY_FILE:-$HOME/.config/gitops-lab/github-mirror-token.env}"
+GITEA_TOKEN_FILE="${GITEA_GIT_TOKEN_FILE:-${LAB_CONFIG_DIR}/gitea-git-token}"
+EXPIRY_FILE="${GITHUB_MIRROR_EXPIRY_FILE:-${LAB_CONFIG_DIR}/github-mirror-token.env}"
 WARN_DAYS="${MIRROR_WARN_DAYS:-14}"
 CRIT_HOURS="${MIRROR_CRIT_HOURS:-24}"
 

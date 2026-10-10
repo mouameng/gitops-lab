@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_SCRIPT="$SCRIPT_DIR/backup-gitea.sh"
@@ -7,7 +8,7 @@ BACKUP_SCRIPT="$SCRIPT_DIR/backup-gitea.sh"
 restore_admin_secret() {
     local backup_dir secret_file
 
-    backup_dir="${GITEA_BACKUP_DIR:-$HOME/.local/share/gitops-lab/backups/gitea}"
+    backup_dir="${GITEA_BACKUP_DIR:-${LAB_GITEA_BACKUP_DIR}}"
     secret_file="$backup_dir/$GAME/admin-secret.json"
 
     # Le prévol commun doit avoir réussi avant tout appel.
@@ -60,7 +61,7 @@ restore_admin_secret() {
 verify_restored_admin_secret() {
     local backup_dir secret_file expected actual
 
-    backup_dir="${GITEA_BACKUP_DIR:-$HOME/.local/share/gitops-lab/backups/gitea}"
+    backup_dir="${GITEA_BACKUP_DIR:-${LAB_GITEA_BACKUP_DIR}}"
     secret_file="$backup_dir/$GAME/admin-secret.json"
 
     expected="$(
@@ -143,7 +144,7 @@ check_restore_volume_empty() {
 restore_data_archive() {
     local backup_dir archive
 
-    backup_dir="${GITEA_BACKUP_DIR:-$HOME/.local/share/gitops-lab/backups/gitea}"
+    backup_dir="${GITEA_BACKUP_DIR:-${LAB_GITEA_BACKUP_DIR}}"
     archive="$backup_dir/$GAME/data.tar.gz"
 
     # Revalider le jeu juste avant le transfert.
@@ -165,7 +166,7 @@ restore_data_archive() {
 verify_restored_files() {
     local backup_dir archive member expected actual
 
-    backup_dir="${GITEA_BACKUP_DIR:-$HOME/.local/share/gitops-lab/backups/gitea}"
+    backup_dir="${GITEA_BACKUP_DIR:-${LAB_GITEA_BACKUP_DIR}}"
     archive="$backup_dir/$GAME/data.tar.gz"
 
     for member in gitea.db gitea/conf/app.ini; do

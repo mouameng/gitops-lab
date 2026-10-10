@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 usage() {
     cat <<EOF
@@ -92,7 +93,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Inventaire des workloads à traiter lors du futur bootstrap.
 # Ce bloc reste inaccessible tant que la garde [STOP] est présente.
 INVENTORY="${ROOT_DIR}/clusters/workloads.tsv"
-KEY_BACKUP="${KEY_BACKUP:-${HOME}/.config/gitops-lab/sealed-secrets-keyx9rjr-2026-09-29.yaml}"
+KEY_BACKUP="${KEY_BACKUP:-${LAB_CONFIG_DIR}/sealed-secrets-keyx9rjr-2026-09-29.yaml}"
 
 [[ -f "$INVENTORY" ]] || {
     echo "[ERROR] Inventaire absent : $INVENTORY" >&2
@@ -220,7 +221,7 @@ done < "$INVENTORY"
 # de la clé, renouvellement des accès, puis activation de la Root App.
 
 # Prévol du manifeste Argo CD avant toute confirmation destructive.
-ARGOCD_MANIFEST="${HOME}/.config/gitops-lab/pra-isolated/argocd-v3.5.3-install.yaml"
+ARGOCD_MANIFEST="${LAB_PRA_ISOLATED_DIR}/argocd-v3.5.3-install.yaml"
 EXPECTED_ARGOCD_SHA256="7efe2d6bbc03f63623640f1e4198f16c84009d510fb810ef71e56df1b7614ba9"
 [[ -f "$ARGOCD_MANIFEST" && -r "$ARGOCD_MANIFEST" ]] || {
     echo "[STOP] Manifeste Argo CD absent ou illisible" >&2
@@ -233,7 +234,7 @@ actual_argocd_sha256="$(sha256sum "$ARGOCD_MANIFEST" | cut -d ' ' -f 1)"
 }
 echo "[OK] Manifeste Argo CD vérifié avant le menu PRA"
 
-candidate_dir="${HOME}/.config/gitops-lab/registration-candidates"
+candidate_dir="${LAB_REGISTRATION_CANDIDATES_DIR}"
 [[ -d "$candidate_dir" ]] || {
     echo "[STOP] Répertoire de candidats absent" >&2
     exit 1
@@ -430,7 +431,7 @@ for file in gitea-restore-pvc.yaml gitea-restore-pod.yaml; do
     }
 done
 
-export ARGOCD_ADMIN_HASH_FILE="${ARGOCD_ADMIN_HASH_FILE:-$HOME/.config/gitops-lab/argocd-admin-password.bcrypt}"
+export ARGOCD_ADMIN_HASH_FILE="${ARGOCD_ADMIN_HASH_FILE:-${LAB_CONFIG_DIR}/argocd-admin-password.bcrypt}"
 
 [[ -f "$ARGOCD_ADMIN_HASH_FILE" &&
    -r "$ARGOCD_ADMIN_HASH_FILE" &&
@@ -448,7 +449,7 @@ grep -Eq '^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$' \
 
 echo "[OK] Hash administrateur Argo CD controle avant destruction"
 
-CA_DIR="${HOME}/.config/gitops-lab"
+CA_DIR="${LAB_CONFIG_DIR}"
 CA_CERT="${CA_DIR}/gitops-lab-root-ca.crt"
 CA_KEY="${CA_DIR}/gitops-lab-root-ca.key"
 
@@ -676,7 +677,7 @@ fi
 
 # Installer Argo CD sur le management recréé, sans activer la Root App.
 CLUSTER_NAME=gitops-management \
-ARGOCD_MANIFEST="${HOME}/.config/gitops-lab/pra-isolated/argocd-v3.5.3-install.yaml" \
+ARGOCD_MANIFEST="${LAB_PRA_ISOLATED_DIR}/argocd-v3.5.3-install.yaml" \
     bash "${ROOT_DIR}/scripts/bootstrap-management.sh"
 
 # À exécuter uniquement après création du management neuf.
@@ -829,7 +830,7 @@ while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
 done < "$INVENTORY"
 
 # Jalon PRA : candidats dev/prod, hors Git.
-candidate_dir="${HOME}/.config/gitops-lab/registration-candidates"
+candidate_dir="${LAB_REGISTRATION_CANDIDATES_DIR}"
 while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
     [[ "$environment" == "environment" ]] && continue
     MGMT_CONTEXT="$MGMT_CONTEXT" \
@@ -1154,7 +1155,7 @@ done < "$INVENTORY"
     kubectl config set-context "$MGMT_CONTEXT" \
         --namespace=argocd >/dev/null
 
-    log_dir="$HOME/.local/share/gitops-lab/logs"
+    log_dir="${LAB_DATA_DIR}/logs"
     mkdir -p "$log_dir"
     sync_log="$(mktemp "$log_dir/argocd-sync.XXXXXXXX.log")"
 

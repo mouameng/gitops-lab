@@ -26,11 +26,12 @@
 # Codes retour : 0 OK | 1 erreur ([STOP]) | 2 (--status seulement) absente ou différente.
 
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}"
 DNS_NAME="${DNS_NAME:-gitea.local}"
 DNS_TARGET="${DNS_TARGET:-traefik.traefik.svc.cluster.local}"
-BACKUP_DIR="${DNS_BACKUP_DIR:-${HOME}/.local/share/gitops-lab/dns-backups}"
+BACKUP_DIR="${DNS_BACKUP_DIR:-${LAB_DATA_DIR}/dns-backups}"
 ROLLOUT_TIMEOUT="${DNS_ROLLOUT_TIMEOUT:-180s}"
 WAIT_CM_SECONDS="${DNS_WAIT_CM_SECONDS:-90}"
 

@@ -5,11 +5,12 @@
 # Usage : gitea-publish.sh --check          (dry-run, aucune ecriture)
 #         gitea-publish.sh --push <sha>     (fast-forward de main)
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}"
-TOKEN_FILE="${GITEA_GIT_TOKEN_FILE:-$HOME/.config/gitops-lab/gitea-git-token}"
+TOKEN_FILE="${GITEA_GIT_TOKEN_FILE:-${LAB_CONFIG_DIR}/gitea-git-token}"
 REPO_PATH="platform/infrastructure-devops"
 LOCAL_PORT="${GITEA_PF_PORT:-13000}"
 MODE="${1:-}"

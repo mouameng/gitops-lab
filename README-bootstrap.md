@@ -48,7 +48,7 @@ git push
 
 ```bash
 kind create cluster --name gitops-management --config clusters/management/kind-config.yaml
-SEALED_KEYS="$HOME/.config/gitops-lab/sealed-secrets-key.yaml" ./scripts/bootstrap-management.sh
+SEALED_KEYS="$HOME/.config/lab/sealed-secrets-key.yaml" ./scripts/bootstrap-management.sh
 ```
 
 Le Root App recrée ensuite les projets, l'enregistrement du workload et les Applications.

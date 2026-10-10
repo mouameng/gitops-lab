@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 CLUSTER_NAME="${CLUSTER_NAME:?Définir CLUSTER_NAME explicitement}"
 ARGOCD_NAMESPACE="argocd"
 ARGOCD_MANIFEST="${ARGOCD_MANIFEST:?Définir ARGOCD_MANIFEST explicitement}"
 EXPECTED_SHA256="7efe2d6bbc03f63623640f1e4198f16c84009d510fb810ef71e56df1b7614ba9"
-ARGOCD_ADMIN_HASH_FILE="${ARGOCD_ADMIN_HASH_FILE:-$HOME/.config/gitops-lab/argocd-admin-password.bcrypt}"
+ARGOCD_ADMIN_HASH_FILE="${ARGOCD_ADMIN_HASH_FILE:-${LAB_CONFIG_DIR}/argocd-admin-password.bcrypt}"
 
 [[ -f "$ARGOCD_ADMIN_HASH_FILE" &&
    -r "$ARGOCD_ADMIN_HASH_FILE" &&

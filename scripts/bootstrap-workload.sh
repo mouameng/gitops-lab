@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 MGMT_CONTEXT="${MGMT_CONTEXT:?Definir MGMT_CONTEXT explicitement}"
 KIND_CLUSTER="${KIND_CLUSTER:?Définir KIND_CLUSTER explicitement}"
@@ -25,7 +26,7 @@ if [[ ! -f "$INVENTORY" ]] ||
   exit 1
 fi
 
-CANDIDATE_DIR="${HOME}/.config/gitops-lab/registration-candidates"
+CANDIDATE_DIR="${LAB_REGISTRATION_CANDIDATES_DIR}"
 EXPECTED_OUTPUT="${CANDIDATE_DIR}/${ARGOCD_CLUSTER}-sealedsecret.yaml"
 [[ -d "$CANDIDATE_DIR" && "$OUTPUT" == "$EXPECTED_OUTPUT" ]] || {
   echo "[STOP] OUTPUT doit designer le candidat hors Git attendu" >&2

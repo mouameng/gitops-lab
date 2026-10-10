@@ -19,6 +19,7 @@
 # Pour les contrôles « covered » et « manual », le niveau n'indique que la criticité.
 
 set -uo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST="${EXTERNAL_DEPS_MANIFEST:-${ROOT_DIR}/scripts/external-deps.tsv}"
@@ -47,6 +48,8 @@ expand_path() {
   p="${p/#\~/$HOME}"
   p="${p/#\$\{HOME\}/$HOME}"
   p="${p/#\$HOME/$HOME}"
+  p="${p/#\$\{LAB_CONFIG_DIR\}/$LAB_CONFIG_DIR}"
+  p="${p/#\$\{LAB_DATA_DIR\}/$LAB_DATA_DIR}"
   printf '%s' "$p"
 }
 

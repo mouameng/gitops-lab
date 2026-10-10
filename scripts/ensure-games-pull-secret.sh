@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Secret de lecture du registre games sur les clusters workload.
-# Le jeton games-puller (read:package) reste hors Git, dans ~/.config/gitops-lab/.
+# Le jeton games-puller (read:package) reste hors Git, dans ${LAB_CONFIG_DIR} (voir lab-paths.sh).
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 umask 077
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INVENTORY="${ROOT_DIR}/clusters/workloads.tsv"
-TOKEN_FILE="${HOME}/.config/gitops-lab/gitea-games-registry-pull.token"
+TOKEN_FILE="${LAB_CONFIG_DIR}/gitea-games-registry-pull.token"
 REGISTRY_HOST="gitea.local"
 REGISTRY_URL="${REGISTRY_BASE_URL:-https://${REGISTRY_HOST}}"
 REGISTRY_USER="games-puller"

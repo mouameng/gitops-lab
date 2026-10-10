@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 DEFAULT_MANIFEST="$SCRIPT_DIR/git-backup-repositories.tsv"
@@ -152,7 +153,7 @@ validate_manifest() {
 
 preflight_gitea() {
   local manifest="$1"
-  local token_file="${GITEA_DISCOVERY_TOKEN_FILE:-$HOME/.config/gitops-lab/gitea-repository-discovery.token}"
+  local token_file="${GITEA_DISCOVERY_TOKEN_FILE:-${LAB_CONFIG_DIR}/gitea-repository-discovery.token}"
   local api="${GITEA_API_URL:-https://gitea.local/api/v1}"
   local org page response count repo source status
   local errors=0
