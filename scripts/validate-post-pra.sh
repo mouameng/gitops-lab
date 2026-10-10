@@ -126,38 +126,66 @@ done < "$ROOT_DIR/scripts/git-backup-repositories.tsv"
 echo "=== 4. Applications Argo CD ==="
 
 apps_json="$TMP/applications.json"
+ARGOCD_WAIT_TIMEOUT="${ARGOCD_WAIT_TIMEOUT:-300}"
+ARGOCD_WAIT_INTERVAL="${ARGOCD_WAIT_INTERVAL:-5}"
 
-kubectl --context "$CTX" -n argocd \
-    get applications -o json > "$apps_json"
-
-app_count="$(jq '.items | length' "$apps_json")"
-
-[[ "$app_count" -gt 0 ]] || {
-    echo "[STOP] Aucune Application Argo CD trouvée" >&2
+[[ "$ARGOCD_WAIT_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || {
+    echo "[STOP] ARGOCD_WAIT_TIMEOUT invalide" >&2
     exit 1
 }
 
-bad_apps="$(
-    jq -r '
-        .items[]
-        | select(
-            .status.sync.status != "Synced"
-            or .status.health.status != "Healthy"
-        )
-        | [
-            .metadata.name,
-            .status.sync.status,
-            .status.health.status
-        ]
-        | @tsv
-    ' "$apps_json"
-)"
-
-[[ -z "$bad_apps" ]] || {
-    echo "[STOP] Applications Argo CD non conformes :" >&2
-    echo "$bad_apps" >&2
+[[ "$ARGOCD_WAIT_INTERVAL" =~ ^[1-9][0-9]*$ ]] || {
+    echo "[STOP] ARGOCD_WAIT_INTERVAL invalide" >&2
     exit 1
 }
+
+deadline=$((SECONDS + ARGOCD_WAIT_TIMEOUT))
+attempt=0
+
+while true; do
+    attempt=$((attempt + 1))
+
+    kubectl --context "$CTX" -n argocd \
+        get applications -o json > "$apps_json"
+
+    app_count="$(jq '.items | length' "$apps_json")"
+
+    [[ "$app_count" -gt 0 ]] || {
+        echo "[STOP] Aucune Application Argo CD trouvée" >&2
+        exit 1
+    }
+
+    bad_apps="$(
+        jq -r '
+            .items[]
+            | select(
+                .status.sync.status != "Synced"
+                or .status.health.status != "Healthy"
+            )
+            | [
+                .metadata.name,
+                (.status.sync.status // ""),
+                (.status.health.status // "")
+            ]
+            | @tsv
+        ' "$apps_json"
+    )"
+
+    if [[ -z "$bad_apps" ]]; then
+        break
+    fi
+
+    echo "[INFO] Convergence Argo CD en cours, tentative $attempt :"
+    printf '%s\n' "$bad_apps"
+
+    if ((SECONDS >= deadline)); then
+        echo "[STOP] Délai de convergence Argo CD dépassé après ${ARGOCD_WAIT_TIMEOUT}s" >&2
+        echo "$bad_apps" >&2
+        exit 1
+    fi
+
+    sleep "$ARGOCD_WAIT_INTERVAL"
+done
 
 echo "[OK] Applications Argo CD conformes : $app_count Synced/Healthy"
 
