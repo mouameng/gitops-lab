@@ -69,6 +69,7 @@ if [[ "${1:-}" == "--plan" && "$#" -eq 1 ]]; then
         printf "[PLAN] kind create cluster --name %s --config clusters/workload-%s/kind-config.yaml\n", $2, $1
     }' "$inventory"
     echo "[PLAN] bash scripts/configure-workload-registry.sh (gitea.local, CA et hosts.toml sur les nœuds workload)"
+    echo "[PLAN] bash scripts/ensure-games-pull-secret.sh --apply (namespace game-2048 et Secret games-registry-pull sur les workloads)"
     echo "[OK] Plan affiché ; aucune action Kubernetes ou Docker exécutée"
     exit 0
 fi
@@ -353,6 +354,22 @@ GIT_BACKUP_MANIFEST="${ROOT_DIR}/scripts/git-backup-repositories.tsv"
 }
 
 echo "[OK] Dépôts Git à sauvegarder inventoriés et destinations accessibles"
+
+# v1.3.6 : jeton et lecture du registre games (Secret de pull des workloads).
+PULL_SECRET_SCRIPT="${ROOT_DIR}/scripts/ensure-games-pull-secret.sh"
+
+[[ -f "$PULL_SECRET_SCRIPT" &&
+   -x "$PULL_SECRET_SCRIPT" &&
+   ! -L "$PULL_SECRET_SCRIPT" ]] || {
+    echo "[STOP] Script du Secret de pull absent ou invalide : $PULL_SECRET_SCRIPT" >&2
+    exit 1
+}
+
+"$PULL_SECRET_SCRIPT" --check || {
+    echo "[STOP] Contrôle du Secret de pull games en échec ; PRA non autorisé" >&2
+    exit 1
+}
+echo "[OK] Jeton et lecture du registre games conformes"
 
 # DNS du cluster management : contrôle du rendu seul, sans accès au cluster
 # (script présent, outils, transformation du Corefile de référence).
@@ -642,6 +659,11 @@ done < "$INVENTORY"
 # Accès des nœuds workload au registre Gitea (résolution, CA, hosts.toml).
 # Une seule fois, après création de tous les workloads ; rejouable seul.
 bash "${ROOT_DIR}/scripts/configure-workload-registry.sh"
+
+# v1.3.6 : Secret de lecture du registre games (jeton games-puller) sur les workloads.
+# Les clusters existent, Argo CD n'a encore rien déployé. Le namespace game-2048 est créé
+# s'il est absent ; Argo CD l'adopte ensuite (à confirmer au PRA).
+bash "${ROOT_DIR}/scripts/ensure-games-pull-secret.sh" --apply
 
 # DNS du cluster management : gitea.local -> Service Traefik pour les pods, le DinD et les jobs CI.
 # Le Corefile par défaut de Kind est recréé avec le cluster : l'entrée est donc rejouée à chaque PRA.
