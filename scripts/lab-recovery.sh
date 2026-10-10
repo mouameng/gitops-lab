@@ -33,6 +33,25 @@ lab_recovery_stop_gitea_channel() {
         REGISTRY_BASE_URL
 }
 
+lab_recovery_check_gitea_direct() {
+    local direct_url=""
+
+    if [[ -n "${GITEA_DIRECT_URL:-}" ]]; then
+        direct_url="$GITEA_DIRECT_URL"
+    else
+        printf -v direct_url '%s%s' 'https://' 'gitea.local'
+    fi
+
+    if curl --noproxy '*' --max-time 10 -fsS \
+        "${direct_url}/api/healthz" >/dev/null 2>&1; then
+        echo "[OK] Gitea accessible directement : $direct_url"
+        return 0
+    fi
+
+    echo "[WARN] Gitea inaccessible directement : $direct_url"
+    return 1
+}
+
 lab_recovery_start_gitea_channel() {
     local ready=0
     local attempt
@@ -41,7 +60,7 @@ lab_recovery_start_gitea_channel() {
 
     if ss -ltn "( sport = :${GITEA_RECOVERY_PORT} )" |
        grep -q LISTEN; then
-        echo "[STOP] Port de reprise déjà utilisé : $GITEA_RECOVERY_PORT" >&2
+        echo "[WARN] Port de reprise déjà utilisé : $GITEA_RECOVERY_PORT" >&2
         return 1
     fi
 
@@ -55,7 +74,7 @@ lab_recovery_start_gitea_channel() {
 
     for attempt in {1..30}; do
         if ! kill -0 "$GITEA_RECOVERY_PF_PID" 2>/dev/null; then
-            echo "[STOP] Canal de reprise Gitea interrompu" >&2
+            echo "[WARN] Canal de reprise Gitea interrompu" >&2
             GITEA_RECOVERY_PF_PID=""
             return 1
         fi
@@ -71,7 +90,7 @@ lab_recovery_start_gitea_channel() {
     done
 
     if ((ready != 1)); then
-        echo "[STOP] Gitea indisponible sur le canal de reprise" >&2
+        echo "[WARN] Gitea indisponible sur le canal de reprise" >&2
         lab_recovery_stop_gitea_channel
         return 1
     fi
@@ -426,38 +445,80 @@ echo "[OK] Limite inotify : $inotify_instances"
 }
 
 MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" \
-    bash "${ROOT_DIR}/scripts/gitea/publish.sh" --check-aligned
-echo "[OK] Branche main strictement alignée avec Gitea par le canal de reprise"
-MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea/install-direct.sh" --render-check
+    bash "${ROOT_DIR}/scripts/gitea/install-direct.sh" --render-check
 
-lab_recovery_start_gitea_channel || {
-    echo "[STOP] Ouverture du canal de reprise Gitea impossible" >&2
-    exit 1
-}
+LAB_RECOVERY_PATH=""
+LAB_RECOVERY_GITEA_ACCESS=""
 
-# Dépôt de secours GitHub : contrôle seul (aucune écriture, aucune question).
-# La décision (profil lab / exploit) est prise plus bas, après confirmation du PRA.
-MIRROR_PROFILE="${MIRROR_PROFILE:-lab}"
-case "$MIRROR_PROFILE" in
-    lab|exploit) ;;
+if lab_recovery_check_gitea_direct; then
+    LAB_RECOVERY_GITEA_ACCESS="direct"
+elif lab_recovery_start_gitea_channel; then
+    LAB_RECOVERY_GITEA_ACCESS="recovery-channel"
+else
+    LAB_RECOVERY_GITEA_ACCESS="unavailable"
+fi
+
+case "$LAB_RECOVERY_GITEA_ACCESS" in
+    direct|recovery-channel)
+        LAB_RECOVERY_PATH="nominal"
+        echo "[INFO] Mode de reprise disponible : nominal"
+        echo "[INFO] Accès Gitea retenu : $LAB_RECOVERY_GITEA_ACCESS"
+        ;;
+    unavailable)
+        LAB_RECOVERY_PATH="degraded"
+        echo "[WARN] Aucun accès opérationnel à Gitea"
+        echo "[INFO] La cause de l'indisponibilité n'est pas déterminée par le script"
+        echo "[INFO] Évaluation des garanties locales du mode dégradé"
+        ;;
     *)
-        echo "[STOP] MIRROR_PROFILE invalide : $MIRROR_PROFILE (attendu : lab ou exploit)" >&2
+        echo "[STOP] État d'accès Gitea invalide : $LAB_RECOVERY_GITEA_ACCESS" >&2
         exit 1
         ;;
 esac
-MIRROR_CHECK_SCRIPT="${ROOT_DIR}/scripts/check-github-mirror.sh"
-[[ -f "$MIRROR_CHECK_SCRIPT" && -x "$MIRROR_CHECK_SCRIPT" ]] || {
-    echo "[STOP] Script absent ou non exécutable : $MIRROR_CHECK_SCRIPT" >&2
-    exit 1
-}
+
+export LAB_RECOVERY_PATH LAB_RECOVERY_GITEA_ACCESS
+
+if [[ "$LAB_RECOVERY_PATH" == "nominal" ]]; then
+    MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" \
+        bash "${ROOT_DIR}/scripts/gitea/publish.sh" --check-aligned
+
+    echo "[OK] Branche main strictement alignée avec Gitea"
+else
+    echo "[INFO] Contrôle d'alignement Gitea différé après restauration"
+fi
+
+# Dépôt de secours GitHub.
 mirror_status=0
-"$MIRROR_CHECK_SCRIPT" --check || mirror_status=$?
-case "$mirror_status" in
-    0) echo "[OK] Dépôt de secours GitHub conforme (profil $MIRROR_PROFILE)" ;;
-    2) echo "[WARN] Dépôt de secours en avertissement ; traitement avant sauvegarde Gitea (profil $MIRROR_PROFILE)" ;;
-    3) echo "[WARN] Dépôt de secours critique ; remédiation requise avant destruction (profil $MIRROR_PROFILE)" ;;
-    *) echo "[WARN] Contrôle du dépôt de secours en erreur ($mirror_status) ; le PRA s'arrêtera avant destruction" ;;
-esac
+
+if [[ "$LAB_RECOVERY_PATH" == "nominal" ]]; then
+    # Dépôt de secours GitHub : contrôle seul (aucune écriture, aucune question).
+    # La décision (profil lab / exploit) est prise plus bas, après confirmation du PRA.
+    MIRROR_PROFILE="${MIRROR_PROFILE:-lab}"
+    case "$MIRROR_PROFILE" in
+        lab|exploit) ;;
+        *)
+            echo "[STOP] MIRROR_PROFILE invalide : $MIRROR_PROFILE (attendu : lab ou exploit)" >&2
+            exit 1
+            ;;
+    esac
+    MIRROR_CHECK_SCRIPT="${ROOT_DIR}/scripts/check-github-mirror.sh"
+    [[ -f "$MIRROR_CHECK_SCRIPT" && -x "$MIRROR_CHECK_SCRIPT" ]] || {
+        echo "[STOP] Script absent ou non exécutable : $MIRROR_CHECK_SCRIPT" >&2
+        exit 1
+    }
+    mirror_status=0
+    "$MIRROR_CHECK_SCRIPT" --check || mirror_status=$?
+    case "$mirror_status" in
+        0) echo "[OK] Dépôt de secours GitHub conforme (profil $MIRROR_PROFILE)" ;;
+        2) echo "[WARN] Dépôt de secours en avertissement ; traitement avant sauvegarde Gitea (profil $MIRROR_PROFILE)" ;;
+        3) echo "[WARN] Dépôt de secours critique ; remédiation requise avant destruction (profil $MIRROR_PROFILE)" ;;
+        *) echo "[WARN] Contrôle du dépôt de secours en erreur ($mirror_status) ; le PRA s'arrêtera avant destruction" ;;
+    esac
+
+else
+    echo "[WARN] Contrôle du dépôt de secours différé : Gitea indisponible"
+    echo "[INFO] Aucune remédiation du mirror ne sera exécutée avant restauration"
+fi
 
 # Éléments hors source de vérité (inventaire scripts/external-deps.tsv) : contrôle seul.
 # Codes 0 et 2 : le prévol continue ; codes 1 (inventaire invalide) et 3 : arrêt avant le menu PRA.
@@ -467,7 +528,10 @@ EXTERNAL_DEPS_SCRIPT="${ROOT_DIR}/scripts/check-external-deps.sh"
     exit 1
 }
 external_deps_args=(--check)
-if [[ "${EXTERNAL_DEPS_OFFLINE:-0}" == "1" ]]; then
+if [[ "$LAB_RECOVERY_PATH" == "degraded" ]]; then
+    external_deps_args+=(--offline)
+    echo "[WARN] Dépendances externes contrôlées hors ligne en mode dégradé"
+elif [[ "${EXTERNAL_DEPS_OFFLINE:-0}" == "1" ]]; then
     external_deps_args+=(--offline)
 fi
 external_deps_status=0
@@ -499,12 +563,22 @@ GIT_BACKUP_MANIFEST="${ROOT_DIR}/scripts/git-backup-repositories.tsv"
     exit 1
 }
 
-"$GIT_BACKUP_SCRIPT" --preflight || {
-    echo "[STOP] Prévol des sauvegardes Git en échec ; PRA non autorisé" >&2
-    exit 1
-}
+if [[ "$LAB_RECOVERY_PATH" == "nominal" ]]; then
+    "$GIT_BACKUP_SCRIPT" --preflight || {
+        echo "[STOP] Prévol des sauvegardes Git en échec ; PRA non autorisé" >&2
+        exit 1
+    }
 
-echo "[OK] Dépôts Git à sauvegarder inventoriés et destinations accessibles"
+    echo "[OK] Dépôts Git à sauvegarder inventoriés et destinations accessibles"
+else
+    "$GIT_BACKUP_SCRIPT" --validate || {
+        echo "[STOP] Inventaire local des sauvegardes Git invalide" >&2
+        exit 1
+    }
+
+    echo "[OK] Inventaire local des sauvegardes Git valide"
+    echo "[WARN] Découverte Gitea et destinations GitHub différées"
+fi
 
 # v1.3.6 : jeton et lecture du registre games (Secret de pull des workloads).
 PULL_SECRET_SCRIPT="${ROOT_DIR}/scripts/ensure-games-pull-secret.sh"
@@ -516,11 +590,23 @@ PULL_SECRET_SCRIPT="${ROOT_DIR}/scripts/ensure-games-pull-secret.sh"
     exit 1
 }
 
-"$PULL_SECRET_SCRIPT" --check || {
-    echo "[STOP] Contrôle du Secret de pull games en échec ; PRA non autorisé" >&2
-    exit 1
-}
-echo "[OK] Jeton et lecture du registre games conformes"
+if [[ "$LAB_RECOVERY_PATH" == "nominal" ]]; then
+    "$PULL_SECRET_SCRIPT" --check || {
+        echo "[STOP] Contrôle du Secret de pull games en échec ; PRA non autorisé" >&2
+        exit 1
+    }
+
+    echo "[OK] Jeton et lecture du registre games conformes"
+else
+    EXTERNAL_DEPS_OFFLINE=1 \
+        "$PULL_SECRET_SCRIPT" --check || {
+            echo "[STOP] Contrôle local du Secret de pull games en échec" >&2
+            exit 1
+        }
+
+    echo "[OK] Jeton local de pull games conforme"
+    echo "[WARN] Lecture du registre games différée"
+fi
 
 # DNS du cluster management : contrôle du rendu seul, sans accès au cluster
 # (script présent, outils, transformation du Corefile de référence).
@@ -634,6 +720,60 @@ unset ca_cert_pub ca_key_pub
 echo "[OK] Paire CA locale validée avant destruction"
 
 if [[ "$PREFLIGHT_ONLY" -eq 1 ]]; then
+    if [[ "$LAB_RECOVERY_PATH" == "degraded" ]]; then
+        echo "[INFO] Évaluation non modifiante des sauvegardes locales Gitea"
+
+        if ! preflight_backup_output="$(
+            bash "${ROOT_DIR}/scripts/gitea/backup.sh" --latest 2>&1
+        )"; then
+            printf '%s\n' "$preflight_backup_output"
+            echo "[STOP] Mode dégradé indisponible : aucun jeu Gitea local valide" >&2
+            exit 1
+        fi
+
+        printf '%s\n' "$preflight_backup_output"
+
+        preflight_game="$(
+            printf '%s\n' "$preflight_backup_output" |
+                awk '$1 == "[SELECT]" { print $2 }'
+        )"
+
+        preflight_selection="$(
+            printf '%s\n' "$preflight_backup_output" |
+                awk '
+                    $1 == "[RESULT]" {
+                        for (i = 2; i <= NF; i++) {
+                            if ($i ~ /^selection=/) {
+                                sub(/^selection=/, "", $i)
+                                print $i
+                            }
+                        }
+                    }
+                '
+        )"
+
+        if [[ ! "$preflight_game" =~ ^[0-9]{8}-[0-9]{6}$ ]]; then
+            echo "[STOP] Jeu Gitea de prévol absent ou ambigu" >&2
+            exit 1
+        fi
+
+        case "$preflight_selection" in
+            latest)
+                echo "[OK] Mode dégradé disponible avec le jeu local le plus récent"
+                ;;
+            fallback)
+                echo "[WARN] Mode dégradé disponible avec un jeu antérieur"
+                echo "[WARN] Une confirmation renforcée sera requise pendant le PRA réel"
+                ;;
+            *)
+                echo "[STOP] Sélection Gitea de prévol invalide : $preflight_selection" >&2
+                exit 1
+                ;;
+        esac
+
+        echo "[RESULT] preflight_path=degraded backup=$preflight_game selection=$preflight_selection"
+    fi
+
     echo "[OK] Prévol terminé ; aucune action Kind ou Kubernetes appliquée"
     exit 0
 fi
@@ -713,7 +853,9 @@ fi
 # Choisir et figer le jeu Gitea avant toute destruction.
 GITEA_BACKUP_SCRIPT="${ROOT_DIR}/scripts/gitea/backup.sh"
 
-if grep -Fxq -- gitops-management <<< "$existing_clusters"; then
+GITEA_BACKUP_SELECTION="fresh"
+
+if [[ "$LAB_RECOVERY_PATH" == "nominal" ]]; then
     echo "[INFO] Sauvegarde Git fraiche des depots inventories avant destruction"
 
     "$GIT_BACKUP_SCRIPT" --sync || {
@@ -731,14 +873,42 @@ if grep -Fxq -- gitops-management <<< "$existing_clusters"; then
         bash "$GITEA_BACKUP_SCRIPT" --backup
     )"
 else
-    echo "[WARN] Management absent ; sauvegarde Git fraiche impossible"
-    echo "[INFO] Selection du dernier jeu Gitea valide"
+    echo "[WARN] Gitea indisponible ; aucune synchronisation Git fraiche"
+    echo "[WARN] Aucune sauvegarde Gitea fraiche ne sera créée"
+    echo "[INFO] Sélection du premier jeu Gitea local valide"
 
-    gitea_backup_output="$(
-        bash "$GITEA_BACKUP_SCRIPT" --latest
+    if ! gitea_backup_output="$(
+        bash "$GITEA_BACKUP_SCRIPT" \
+            --latest --quarantine-invalid 2>&1
+    )"; then
+        printf '%s\n' "$gitea_backup_output"
+        echo "[STOP] Aucun jeu Gitea local restaurable" >&2
+        exit 1
+    fi
+
+    GITEA_BACKUP_SELECTION="$(
+        printf '%s\n' "$gitea_backup_output" |
+            awk '
+                $1 == "[RESULT]" {
+                    for (i = 2; i <= NF; i++) {
+                        if ($i ~ /^selection=/) {
+                            sub(/^selection=/, "", $i)
+                            print $i
+                        }
+                    }
+                }
+            '
     )"
 fi
 
+case "${LAB_RECOVERY_PATH}:${GITEA_BACKUP_SELECTION}" in
+    nominal:fresh|degraded:latest|degraded:fallback)
+        ;;
+    *)
+        echo "[STOP] État de sélection Gitea invalide : ${LAB_RECOVERY_PATH}:${GITEA_BACKUP_SELECTION}" >&2
+        exit 1
+        ;;
+esac
 
 printf '%s\n' "$gitea_backup_output"
 
@@ -757,7 +927,42 @@ echo "[OK] Jeu Gitea fige pour ce PRA : $GITEA_GAME"
 
 echo "[PREVIEW] Jeu Gitea préparatoire validé : $GITEA_GAME"
 
-if ((${#clusters_to_delete[@]} > 0)); then
+if [[ "$LAB_RECOVERY_PATH" == "degraded" ]]; then
+    echo "[PREVIEW] Mode de reprise : dégradé"
+    echo "[PREVIEW] Accès Gitea : indisponible"
+    echo "[PREVIEW] Jeu Gitea retenu : $GITEA_GAME"
+    echo "[PREVIEW] Sélection du jeu : $GITEA_BACKUP_SELECTION"
+    echo "[WARN] Aucune sauvegarde Gitea fraîche n'a été créée"
+    echo "[WARN] Aucune synchronisation Git fraîche n'a été garantie"
+    echo "[WARN] Les contrôles Gitea, mirror et registre sont différés"
+
+    if [[ "$GITEA_BACKUP_SELECTION" == "fallback" ]]; then
+        echo "[WARN] Un ou plusieurs jeux plus récents ont été rejetés"
+        echo "[WARN] Le jeu retenu est antérieur au dernier jeu disponible"
+        echo "[WARN] Risque accru de régression des données et de la plateforme"
+    fi
+
+    echo "[PREVIEW] Périmètre PRA :"
+    if ((${#clusters_to_delete[@]} == 0)); then
+        echo "  aucun cluster à détruire"
+    else
+        printf "  %s\n" "${clusters_to_delete[@]}"
+    fi
+
+    expected_confirmation="RESTAURER $GITEA_GAME EN MODE DEGRADE"
+    echo
+    printf 'Confirmation requise : %s\n' "$expected_confirmation"
+    read -r -p "> " degraded_confirmation
+
+    if [[ "$degraded_confirmation" != "$expected_confirmation" ]]; then
+        echo "[INFO] Reprise dégradée refusée par l'administrateur"
+        echo "[OK] Jeu Gitea conservé : $GITEA_GAME"
+        echo "[RESULT] PRA dégradé annulé avant reconstruction"
+        exit 0
+    fi
+
+    echo "[PREVIEW] Reprise dégradée explicitement confirmée"
+elif ((${#clusters_to_delete[@]} > 0)); then
     echo "[PREVIEW] Sauvegardes préparatoires terminées ; périmètre prêt à être détruit :"
     printf "  %s\n" "${clusters_to_delete[@]}"
     echo
@@ -780,7 +985,7 @@ if ((${#clusters_to_delete[@]} > 0)); then
             ;;
     esac
 else
-    echo "[OK] Aucun cluster du périmètre PRA à détruire ; confirmation inutile"
+    echo "[OK] Aucun cluster du périmètre PRA à détruire ; confirmation nominale inutile"
 fi
 
 
