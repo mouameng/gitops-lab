@@ -19,7 +19,7 @@ lab_recovery_log_on_exit() {
     local rc=$?
     local finish_rc=0
 
-    trap - EXIT
+    trap - EXIT INT TERM
     set +e
 
     if [[ "${LAB_LOG_ACTIVE:-0}" == "1" &&
@@ -33,6 +33,23 @@ lab_recovery_log_on_exit() {
     fi
 
     exit "$rc"
+}
+
+lab_recovery_log_on_signal() {
+    local signal="$1"
+    local rc="$2"
+
+    trap - "$signal"
+
+    printf '[WARN] Signal reçu : %s ; arrêt avec le code %s\n'         "$signal" "$rc" >&2
+
+    exit "$rc"
+}
+
+lab_recovery_install_log_traps() {
+    trap lab_recovery_log_on_exit EXIT
+    trap 'lab_recovery_log_on_signal INT 130' INT
+    trap 'lab_recovery_log_on_signal TERM 143' TERM
 }
 
 usage() {
@@ -67,7 +84,7 @@ if [[ "${1:-}" == "--plan" && "$#" -eq 1 ]]; then
         "$(git -C "$ROOT_DIR" rev-parse HEAD)" \
         "lab-recovery" || exit 1
 
-    trap lab_recovery_log_on_exit EXIT
+    lab_recovery_install_log_traps
 
     root="$ROOT_DIR"
     inventory="$root/clusters/workloads.tsv"
@@ -126,7 +143,7 @@ if [[ "${1:-}" == "--preflight" && "$#" -eq 1 ]]; then
         "$(git -C "$ROOT_DIR" rev-parse HEAD)" \
         "lab-recovery" || exit 1
 
-    trap lab_recovery_log_on_exit EXIT
+    lab_recovery_install_log_traps
 elif (($# != 0)); then
     echo "[STOP] Argument invalide" >&2
     usage >&2
@@ -139,7 +156,7 @@ else
         "$(git -C "$ROOT_DIR" rev-parse HEAD)" \
         "lab-recovery" || exit 1
 
-    trap lab_recovery_log_on_exit EXIT
+    lab_recovery_install_log_traps
 fi
 
 echo "=================================================="
