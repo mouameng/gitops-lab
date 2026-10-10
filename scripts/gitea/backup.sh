@@ -416,27 +416,90 @@ if [[ "${1:-}" == "--backup-preflight" && "$#" -eq 1 ]]; then
     exit 0
 fi
 
-if [[ "${1:-}" == "--latest" && "$#" -eq 1 ]]; then
+if [[ "${1:-}" == "--latest" ]] &&
+   { [[ "$#" -eq 1 ]] ||
+     [[ "$#" -eq 2 && "${2:-}" == "--quarantine-invalid" ]]; }; then
     [[ -d "$BACKUP_DIR" ]] || {
         echo "[STOP] Répertoire de sauvegarde absent" >&2
         exit 1
     }
 
-    name="$(
+    quarantine_invalid=0
+    [[ "${2:-}" == "--quarantine-invalid" ]] &&
+        quarantine_invalid=1
+
+    mapfile -t candidates < <(
         find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d \
             -printf '%f\n' |
         awk '/^[0-9]{8}-[0-9]{6}$/ { print }' |
-        sort |
-        tail -n 1
-    )"
+        sort -r
+    )
 
-    [[ -n "$name" ]] || {
+    ((${#candidates[@]} > 0)) || {
         echo "[STOP] Aucun jeu de sauvegarde au nouveau format" >&2
+        echo "[RESULT] selection=unavailable rejected=0"
         exit 1
     }
 
-    validate_game "$BACKUP_DIR/$name"
-    echo "[SELECT] $name"
+    latest_name="${candidates[0]}"
+    selected=""
+    rejected=0
+
+    for name in "${candidates[@]}"; do
+        validation_output=""
+
+        if validation_output="$(
+            validate_game "$BACKUP_DIR/$name" 2>&1
+        )"; then
+            printf '%s\n' "$validation_output"
+            selected="$name"
+            break
+        fi
+
+        ((rejected += 1))
+        echo "[WARN] Jeu Gitea invalide rejeté : $name" >&2
+
+        while IFS= read -r validation_line; do
+            [[ -n "$validation_line" ]] || continue
+            validation_line="${validation_line#\[STOP\] }"
+            echo "[WARN] $name : $validation_line" >&2
+        done <<< "$validation_output"
+
+        if ((quarantine_invalid == 1)); then
+            invalid_dir="${GITEA_INVALID_BACKUP_DIR:-$(dirname -- "$BACKUP_DIR")/gitea-invalid}"
+            mkdir -p "$invalid_dir"
+            chmod 700 "$invalid_dir"
+
+            destination="$invalid_dir/$name"
+            [[ ! -e "$destination" ]] || {
+                echo "[STOP] Destination de quarantaine déjà présente : $destination" >&2
+                exit 1
+            }
+
+            mv -- "$BACKUP_DIR/$name" "$destination"
+            echo "[OK] Jeu invalide placé en quarantaine : $destination"
+        else
+            echo "[PREVIEW] Jeu invalide à placer en quarantaine lors du PRA réel : $name"
+        fi
+    done
+
+    if [[ -z "$selected" ]]; then
+        echo "[STOP] Aucun jeu local valide disponible" >&2
+        echo "[RESULT] selection=unavailable rejected=$rejected"
+        exit 1
+    fi
+
+    if [[ "$selected" == "$latest_name" ]]; then
+        selection="latest"
+        echo "[OK] Jeu Gitea le plus récent valide : $selected"
+    else
+        selection="fallback"
+        echo "[WARN] Repli vers un jeu Gitea antérieur : $selected"
+        echo "[WARN] Des données et évolutions de plateforme postérieures peuvent être perdues"
+    fi
+
+    echo "[SELECT] $selected"
+    echo "[RESULT] selection=$selection backup=$selected rejected=$rejected"
     exit 0
 fi
 
@@ -451,7 +514,7 @@ if [[ "${1:-}" == "--validate" && "$#" -eq 2 ]]; then
 fi
 
 if [[ "${1:-}" != "--list" || "$#" -ne 1 ]]; then
-    echo "Usage : $0 --list | --validate AAAAMMJJ-HHMMSS" >&2
+    echo "Usage : $0 --list | --latest [--quarantine-invalid] | --validate AAAAMMJJ-HHMMSS" >&2
     exit 2
 fi
 
