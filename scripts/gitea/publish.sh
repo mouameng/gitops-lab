@@ -2,7 +2,8 @@
 # Publie main vers Gitea par kubectl port-forward (avant que Traefik et
 # gitea.local existent). Jamais de --force. Jeton lu dans un fichier 600,
 # transmis a Git par GIT_ASKPASS (jamais en argument de commande).
-# Usage : scripts/gitea/publish.sh --check          (dry-run, aucune ecriture)
+# Usage : scripts/gitea/publish.sh --check          (avance rapide possible)
+#         scripts/gitea/publish.sh --check-aligned  (HEAD strictement aligne)
 #         scripts/gitea/publish.sh --push <sha>     (fast-forward de main)
 set -euo pipefail
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/../lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
@@ -20,11 +21,16 @@ TARGET="${2:-}"
 stop() { echo "[STOP] $*" >&2; exit 1; }
 
 case "$MODE" in
-    --check) TARGET="$(git -C "$ROOT_DIR" rev-parse HEAD)" ;;
+    --check|--check-aligned)
+        TARGET="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+        ;;
     --push)
         [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]] || stop "--push exige un SHA complet (40 caracteres)"
         ;;
-    *) echo "Usage : $0 --check | --push <sha>" >&2; exit 2 ;;
+    *)
+        echo "Usage : $0 --check | --check-aligned | --push <sha>" >&2
+        exit 2
+        ;;
 esac
 
 git -C "$ROOT_DIR" cat-file -e "${TARGET}^{commit}" 2>/dev/null ||
@@ -92,7 +98,13 @@ git -C "$ROOT_DIR" merge-base --is-ancestor "$remote_main" "$TARGET" ||
     stop "Publication refusee : ${TARGET:0:8} n'avance pas main distant (${remote_main:0:8})"
 echo "[OK] Avance rapide possible : main distant ${remote_main:0:8} -> ${TARGET:0:8}"
 
-if [[ "$MODE" == "--check" ]]; then
+if [[ "$MODE" == "--check-aligned" ]]; then
+    [[ "$remote_main" == "$TARGET" ]] ||
+        stop "HEAD local (${TARGET:0:8}) et main distant (${remote_main:0:8}) differents"
+    echo "[OK] HEAD local strictement aligne avec main distant"
+fi
+
+if [[ "$MODE" == "--check" || "$MODE" == "--check-aligned" ]]; then
     g push --dry-run "$url" "${TARGET}:refs/heads/main"
     echo "[OK] Dry-run accepte (jeton valide, droits d'ecriture) ; rien n'a ete publie"
     exit 0

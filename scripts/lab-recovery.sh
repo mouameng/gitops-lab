@@ -348,14 +348,9 @@ echo "[OK] Limite inotify : $inotify_instances"
     exit 1
 }
 
-local_head="$(git -C "$ROOT_DIR" rev-parse HEAD)"
-remote_head="$(git -C "$ROOT_DIR" ls-remote gitea refs/heads/main | cut -f1)"
-[[ -n "$remote_head" && "$local_head" == "$remote_head" ]] || {
-    echo "[STOP] main local et gitea/main diffèrent ou Gitea est inaccessible" >&2
-    exit 1
-}
-echo "[OK] Branche main alignée avec le dépôt distant"
-MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea/publish.sh" --check
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" \
+    bash "${ROOT_DIR}/scripts/gitea/publish.sh" --check-aligned
+echo "[OK] Branche main strictement alignée avec Gitea par le canal de reprise"
 MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea/install-direct.sh" --render-check
 
 # Dépôt de secours GitHub : contrôle seul (aucune écriture, aucune question).
