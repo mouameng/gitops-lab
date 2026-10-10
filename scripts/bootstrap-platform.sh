@@ -506,28 +506,9 @@ else
     printf "  %s\n" "${clusters_to_delete[@]}"
 fi
 
-if ((${#clusters_to_delete[@]} > 0)); then
-    echo
-    if [[ ! -t 0 ]]; then
-        echo "[STOP] Confirmation interactive requise ; aucun cluster supprimé" >&2
-        exit 1
-    fi
-    read -r -p "Choix PRA [1=refuser (défaut), 2=détruire le périmètre affiché] : " choice
-    case "${choice:-1}" in
-        1)
-            echo "[STOP] PRA refusé ; aucun cluster supprimé"
-            exit 1
-            ;;
-        2)
-            printf "[PREVIEW] Destruction demandée pour %s cluster(s) du périmètre PRA\n" "${#clusters_to_delete[@]}"
-            ;;
-        *)
-            echo "[STOP] Choix invalide ; aucun cluster supprimé" >&2
-            exit 1
-            ;;
-    esac
-else
-    echo "[OK] Aucun cluster du périmètre PRA à détruire ; confirmation inutile"
+if ((${#clusters_to_delete[@]} > 0)) && [[ ! -t 0 ]]; then
+    echo "[STOP] Terminal interactif requis avant les sauvegardes préparatoires" >&2
+    exit 1
 fi
 
 # Dépôt de secours GitHub : remédiation selon le profil, AVANT la sauvegarde fraîche
@@ -621,6 +602,35 @@ fi
 
 bash "$GITEA_BACKUP_SCRIPT" --validate "$GITEA_GAME"
 echo "[OK] Jeu Gitea fige pour ce PRA : $GITEA_GAME"
+
+echo "[PREVIEW] Jeu Gitea préparatoire validé : $GITEA_GAME"
+
+if ((${#clusters_to_delete[@]} > 0)); then
+    echo "[PREVIEW] Sauvegardes préparatoires terminées ; périmètre prêt à être détruit :"
+    printf "  %s\n" "${clusters_to_delete[@]}"
+    echo
+
+    read -r -p "Choix PRA [1=refuser (défaut), 2=détruire le périmètre affiché] : " choice
+
+    case "${choice:-1}" in
+        1)
+            echo "[INFO] Destruction refusée par l'utilisateur"
+            echo "[OK] Jeu Gitea conservé : $GITEA_GAME"
+            echo "[RESULT] PRA annulé avant destruction ; sauvegardes préparatoires conservées"
+            exit 0
+            ;;
+        2)
+            printf "[PREVIEW] Destruction confirmée pour %s cluster(s) du périmètre PRA\n" "${#clusters_to_delete[@]}"
+            ;;
+        *)
+            echo "[STOP] Choix invalide ; aucun cluster supprimé" >&2
+            exit 1
+            ;;
+    esac
+else
+    echo "[OK] Aucun cluster du périmètre PRA à détruire ; confirmation inutile"
+fi
+
 
 # Inaccessible tant que les verrous PRA restent actifs.
 for cluster in "${clusters_to_delete[@]}"; do
@@ -1200,4 +1210,19 @@ kubectl --context "$MGMT_CONTEXT" -n gitea \
     certificate/gitea-local --timeout=300s
 
 echo "[OK] Gitea synchronisee, Deployment disponible, PVC lie et certificat pret"
-echo "[INFO] Connexion et contenu des depots encore a verifier"
+POST_PRA_VALIDATOR="${ROOT_DIR}/scripts/validate-post-pra.sh"
+
+[[ -f "$POST_PRA_VALIDATOR" &&
+   -x "$POST_PRA_VALIDATOR" &&
+   ! -L "$POST_PRA_VALIDATOR" ]] || {
+    echo "[STOP] Validateur post-PRA absent ou invalide : $POST_PRA_VALIDATOR" >&2
+    exit 1
+}
+
+echo "[INFO] Validation automatique de l'état restauré"
+
+MGMT_CONTEXT="$MGMT_CONTEXT" \
+    "$POST_PRA_VALIDATOR" --backup "$GITEA_GAME" || {
+        echo "[STOP] Validation post-PRA automatique en échec" >&2
+        exit 1
+    }
