@@ -2,7 +2,31 @@
 
 set -euo pipefail
 
-if [[ "${1:-}" == "--plan" ]]; then
+usage() {
+    cat <<EOF
+Usage :
+  $0 --help
+  $0 --plan
+  $0 --preflight
+  $0
+
+Modes :
+  --help       Afficher cette aide sans effectuer de contrôle
+  --plan       Afficher le plan de reconstruction sans modifier le lab
+  --preflight  Exécuter uniquement les contrôles préalables au PRA
+  sans option  Exécuter le PRA interactif complet
+
+Le mode interactif affiche le périmètre avant toute destruction et
+demande une confirmation explicite.
+EOF
+}
+
+if [[ "${1:-}" == "--help" && "$#" -eq 1 ]]; then
+    usage
+    exit 0
+fi
+
+if [[ "${1:-}" == "--plan" && "$#" -eq 1 ]]; then
     root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     inventory="$root/clusters/workloads.tsv"
     test -f "$inventory" || { echo "[STOP] Inventaire absent"; exit 1; }
@@ -53,7 +77,8 @@ PREFLIGHT_ONLY=0
 if [[ "${1:-}" == "--preflight" && "$#" -eq 1 ]]; then
     PREFLIGHT_ONLY=1
 elif (($# != 0)); then
-    echo "[STOP] Usage : $0 [--plan|--preflight]" >&2
+    echo "[STOP] Argument invalide" >&2
+    usage >&2
     exit 1
 fi
 
