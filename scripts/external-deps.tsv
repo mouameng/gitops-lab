@@ -29,7 +29,7 @@ github-pat-vault	WARN	manual	gestionnaire de mots de passe	-	Le PAT GitHub n'exi
 # --- Contrôlés par check-external-deps.sh ---
 config-dir-mode	WARN	path	${LAB_CONFIG_DIR}	700	Dossier des secrets, de la CA et des clés.
 backups-dir-mode	WARN	path	${LAB_DATA_DIR}/backups/gitea	700	Les jeux de sauvegarde contiennent le PAT GitHub.
-logs-dir-mode	INFO	path	${LAB_DATA_DIR}/logs	700	Journaux des PRA.
+logs-dir-mode	INFO	path	${LAB_LOG_DIR}	700	Journaux des PRA.
 backups-disk-free	INFO	disk-free	${LAB_DATA_DIR}/backups/gitea	1024	Espace libre minimal en Mo (un jeu complet occupe environ 26 Mo).
 ca-trust-wsl	WARN	ca-trust	${LAB_CONFIG_DIR}/gitops-lab-root-ca.crt	-	CA du lab dans le magasin de confiance WSL ; sinon git et curl refusent le certificat de gitea.local.
 ca-archive-fresh	WARN	file-newer	${LAB_CONFIG_DIR}/gitops-lab-root-ca.tar.age	${LAB_CONFIG_DIR}/gitops-lab-root-ca.crt	Archive de la CA au moins aussi récente que le certificat.

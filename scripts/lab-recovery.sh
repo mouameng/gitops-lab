@@ -1165,7 +1165,7 @@ done < "$INVENTORY"
     kubectl config set-context "$MGMT_CONTEXT" \
         --namespace=argocd >/dev/null
 
-    log_dir="${LAB_DATA_DIR}/logs"
+    log_dir="${LAB_LOG_DIR}"
     mkdir -p "$log_dir"
     sync_log="$(mktemp "$log_dir/argocd-sync.XXXXXXXX.log")"
 
