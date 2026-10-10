@@ -1,7 +1,39 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+
+. "$SCRIPT_DIR/lib/lab-paths.sh" || {
+    echo "[ERREUR] lab-paths.sh illisible" >&2
+    exit 1
+}
+
+. "$SCRIPT_DIR/lib/lab-log.sh" || {
+    echo "[ERREUR] lab-log.sh illisible" >&2
+    exit 1
+}
+
+lab_recovery_log_on_exit() {
+    local rc=$?
+    local finish_rc=0
+
+    trap - EXIT
+    set +e
+
+    if [[ "${LAB_LOG_ACTIVE:-0}" == "1" &&
+          "${LAB_LOG_OWNER_PID:-}" == "$$" ]]; then
+        lab_log_finish "$rc"
+        finish_rc=$?
+    fi
+
+    if ((rc == 0 && finish_rc != 0)); then
+        rc="$finish_rc"
+    fi
+
+    exit "$rc"
+}
 
 usage() {
     cat <<EOF
@@ -28,7 +60,16 @@ if [[ "${1:-}" == "--help" && "$#" -eq 1 ]]; then
 fi
 
 if [[ "${1:-}" == "--plan" && "$#" -eq 1 ]]; then
-    root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    LAB_RECOVERY_MODE="plan"
+
+    lab_log_start \
+        "$LAB_RECOVERY_MODE" \
+        "$(git -C "$ROOT_DIR" rev-parse HEAD)" \
+        "lab-recovery" || exit 1
+
+    trap lab_recovery_log_on_exit EXIT
+
+    root="$ROOT_DIR"
     inventory="$root/clusters/workloads.tsv"
     test -f "$inventory" || { echo "[STOP] Inventaire absent"; exit 1; }
     test -f "$root/clusters/management/kind-config.yaml" || {
@@ -78,6 +119,14 @@ fi
 PREFLIGHT_ONLY=0
 if [[ "${1:-}" == "--preflight" && "$#" -eq 1 ]]; then
     PREFLIGHT_ONLY=1
+    LAB_RECOVERY_MODE="preflight"
+
+    lab_log_start \
+        "$LAB_RECOVERY_MODE" \
+        "$(git -C "$ROOT_DIR" rev-parse HEAD)" \
+        "lab-recovery" || exit 1
+
+    trap lab_recovery_log_on_exit EXIT
 elif (($# != 0)); then
     echo "[STOP] Argument invalide" >&2
     usage >&2
@@ -87,8 +136,6 @@ fi
 echo "=================================================="
 echo "GitOps Platform Bootstrap"
 echo "=================================================="
-
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Inventaire des workloads à traiter lors du futur bootstrap.
 # Ce bloc reste inaccessible tant que la garde [STOP] est présente.
