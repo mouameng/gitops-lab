@@ -950,18 +950,29 @@ if [[ "$LAB_RECOVERY_PATH" == "degraded" ]]; then
     fi
 
     expected_confirmation="RESTAURER $GITEA_GAME EN MODE DEGRADE"
+
     echo
-    printf 'Confirmation requise : %s\n' "$expected_confirmation"
+    echo "[CHOICE] Poursuivre : $expected_confirmation"
+    echo "[CHOICE] Annuler    : ANNULER ou Entrée"
     read -r -p "> " degraded_confirmation
 
-    if [[ "$degraded_confirmation" != "$expected_confirmation" ]]; then
-        echo "[INFO] Reprise dégradée refusée par l'administrateur"
-        echo "[OK] Jeu Gitea conservé : $GITEA_GAME"
-        echo "[RESULT] PRA dégradé annulé avant reconstruction"
-        exit 0
-    fi
-
-    echo "[PREVIEW] Reprise dégradée explicitement confirmée"
+    case "$degraded_confirmation" in
+        "$expected_confirmation")
+            echo "[PREVIEW] Reprise dégradée explicitement confirmée"
+            ;;
+        ""|ANNULER)
+            echo "[INFO] Reprise dégradée refusée par l'administrateur"
+            echo "[OK] Jeu Gitea conservé : $GITEA_GAME"
+            echo "[RESULT] PRA dégradé annulé avant reconstruction"
+            exit 0
+            ;;
+        *)
+            echo "[WARN] Choix non reconnu ; annulation par sécurité"
+            echo "[OK] Jeu Gitea conservé : $GITEA_GAME"
+            echo "[RESULT] PRA dégradé annulé avant reconstruction"
+            exit 0
+            ;;
+    esac
 elif ((${#clusters_to_delete[@]} > 0)); then
     echo "[PREVIEW] Sauvegardes préparatoires terminées ; périmètre prêt à être détruit :"
     printf "  %s\n" "${clusters_to_delete[@]}"
