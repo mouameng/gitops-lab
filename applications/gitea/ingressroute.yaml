@@ -1,6 +1,8 @@
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   name: gitea
   namespace: gitea
 spec:

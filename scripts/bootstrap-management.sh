@@ -90,6 +90,23 @@ fi
 kubectl --context "$MGMT_CONTEXT" -n argocd apply \
   -f "${ROOT_DIR}/applications/argocd/argocd-cmd-params-cm.yaml"
 
+# Argo CD doit évaluer Certificate Ready=True comme Healthy.
+# Ce health check rend les sync waves Certificate -> IngressRoute bloquantes.
+kubectl --context "$MGMT_CONTEXT" -n argocd apply \
+  --server-side \
+  --field-manager=lab-bootstrap \
+  -f "${ROOT_DIR}/applications/argocd/argocd-cm-health.yaml"
+
+# Recharger explicitement les personnalisations de santé depuis argocd-cm.
+kubectl --context "$MGMT_CONTEXT" -n argocd \
+  rollout restart statefulset/argocd-application-controller
+
+kubectl --context "$MGMT_CONTEXT" -n argocd \
+  rollout status statefulset/argocd-application-controller \
+  --timeout=300s
+
+echo "[OK] Health checks Argo CD chargés par l'application-controller"
+
 # Lors d'une installation neuve, le pod a pu démarrer avant cette application.
 if [[ "$ARGOCD_FRESH_INSTALL" == "true" ]]; then
   kubectl --context "$MGMT_CONTEXT" -n argocd \
