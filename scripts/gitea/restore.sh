@@ -2,7 +2,8 @@
 set -euo pipefail
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/../lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPTS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
 BACKUP_SCRIPT="$SCRIPT_DIR/backup.sh"
 
 restore_admin_secret() {
@@ -88,8 +89,8 @@ verify_restored_admin_secret() {
 prepare_restore_volume() {
     local pvc_manifest pod_manifest
 
-    pvc_manifest="$SCRIPT_DIR/manifests/gitea-restore-pvc.yaml"
-    pod_manifest="$SCRIPT_DIR/manifests/gitea-restore-pod.yaml"
+    pvc_manifest="$SCRIPTS_DIR/manifests/gitea-restore-pvc.yaml"
+    pod_manifest="$SCRIPTS_DIR/manifests/gitea-restore-pod.yaml"
 
     kubectl --context "$CONTEXT" --request-timeout=15s \
         create --dry-run=server -f "$pvc_manifest" -o name
@@ -259,8 +260,8 @@ command -v yq >/dev/null || {
 }
 
 for file in gitea-restore-pvc.yaml gitea-restore-pod.yaml; do
-    [[ -f "$SCRIPT_DIR/manifests/$file" &&
-       ! -L "$SCRIPT_DIR/manifests/$file" ]] || {
+    [[ -f "$SCRIPTS_DIR/manifests/$file" &&
+       ! -L "$SCRIPTS_DIR/manifests/$file" ]] || {
         echo "[STOP] Manifeste absent ou invalide : $file" >&2
         exit 1
     }
@@ -276,7 +277,7 @@ yq -e '
   .spec.volumeMode == "Filesystem" and
   .spec.storageClassName == "standard" and
   .spec.resources.requests.storage == "2Gi"
-' "$SCRIPT_DIR/manifests/gitea-restore-pvc.yaml" >/dev/null || {
+' "$SCRIPTS_DIR/manifests/gitea-restore-pvc.yaml" >/dev/null || {
     echo "[STOP] Manifeste PVC non conforme" >&2
     exit 1
 }
@@ -305,7 +306,7 @@ yq -e '
   .spec.volumes[0].name == "data" and
   .spec.volumes[0].persistentVolumeClaim.claimName == "gitea-shared-storage" and
   (.spec.volumes[0].persistentVolumeClaim.readOnly // false) == false
-' "$SCRIPT_DIR/manifests/gitea-restore-pod.yaml" >/dev/null || {
+' "$SCRIPTS_DIR/manifests/gitea-restore-pod.yaml" >/dev/null || {
     echo "[STOP] Manifeste pod non conforme" >&2
     exit 1
 }
