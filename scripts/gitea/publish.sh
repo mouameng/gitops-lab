@@ -2,13 +2,14 @@
 # Publie main vers Gitea par kubectl port-forward (avant que Traefik et
 # gitea.local existent). Jamais de --force. Jeton lu dans un fichier 600,
 # transmis a Git par GIT_ASKPASS (jamais en argument de commande).
-# Usage : gitea-publish.sh --check          (dry-run, aucune ecriture)
-#         gitea-publish.sh --push <sha>     (fast-forward de main)
+# Usage : scripts/gitea/publish.sh --check          (dry-run, aucune ecriture)
+#         scripts/gitea/publish.sh --push <sha>     (fast-forward de main)
 set -euo pipefail
-. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/../lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPTS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+ROOT_DIR="$(cd -- "$SCRIPTS_DIR/.." && pwd -P)"
 CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}"
 TOKEN_FILE="${GITEA_GIT_TOKEN_FILE:-${LAB_CONFIG_DIR}/gitea-git-token}"
 REPO_PATH="platform/infrastructure-devops"

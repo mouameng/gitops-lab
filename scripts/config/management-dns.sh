@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# configure-management-dns.sh — fait répondre le CoreDNS du cluster management pour
+# scripts/config/management-dns.sh — fait répondre le CoreDNS du cluster management pour
 # gitea.local avec l'adresse du Service Traefik, et non plus 127.0.0.1.
 #
 # Pourquoi : gitea.local résout vers 127.0.0.1 (hosts Windows relayé par WSL). C'est juste pour
@@ -11,13 +11,13 @@
 # retour arrière automatique si CoreDNS ne redémarre pas correctement. Idempotent.
 #
 # Usage :
-#   configure-management-dns.sh --render-check    outils + transformation d'un Corefile de référence ;
+#   scripts/config/management-dns.sh --render-check    outils + transformation d'un Corefile de référence ;
 #                                                 AUCUN accès au cluster
-#   configure-management-dns.sh --preflight       lit le cluster, affiche le diff, dry-run serveur ;
+#   scripts/config/management-dns.sh --preflight       lit le cluster, affiche le diff, dry-run serveur ;
 #                                                 AUCUNE écriture (mode par défaut)
-#   configure-management-dns.sh --apply           sauvegarde, patch, redémarrage, contrôle
-#   configure-management-dns.sh --status          0 = entrée en place, 2 = absente ou différente
-#   configure-management-dns.sh --rollback [fic]  restaure le Corefile d'une sauvegarde
+#   scripts/config/management-dns.sh --apply           sauvegarde, patch, redémarrage, contrôle
+#   scripts/config/management-dns.sh --status          0 = entrée en place, 2 = absente ou différente
+#   scripts/config/management-dns.sh --rollback [fic]  restaure le Corefile d'une sauvegarde
 #                                                 (défaut : la plus récente du contexte)
 #
 # Variables : MGMT_CONTEXT (kind-gitops-management), DNS_NAME (gitea.local),
@@ -26,7 +26,7 @@
 # Codes retour : 0 OK | 1 erreur ([STOP]) | 2 (--status seulement) absente ou différente.
 
 set -euo pipefail
-. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/../lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}"
 DNS_NAME="${DNS_NAME:-gitea.local}"

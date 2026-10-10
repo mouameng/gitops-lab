@@ -5,9 +5,11 @@
 # Rejouable : peut être relancé seul (ex. après redémarrage d'un nœud).
 # Prérequis : config_path actif dans containerd (containerdConfigPatches du kind-config).
 set -euo pipefail
-. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/../lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPTS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+ROOT_DIR="$(cd -- "$SCRIPTS_DIR/.." && pwd -P)"
 INVENTORY="${ROOT_DIR}/clusters/workloads.tsv"
 CA_CRT="${LAB_CONFIG_DIR}/gitops-lab-root-ca.crt"
 MGMT_NODE="gitops-management-control-plane"

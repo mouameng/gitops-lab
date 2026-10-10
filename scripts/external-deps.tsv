@@ -10,11 +10,11 @@
 # Ajouter un élément hors Git = ajouter une ligne ici, dans le même commit.
 #
 # --- Couverts par une garde existante du bootstrap (non réévalués ici) ---
-sealed-key-active	BLOCK	covered	${LAB_CONFIG_DIR}/sealed-secrets-keyx9rjr-2026-09-29.yaml	Sauvegarde de clé validée localement	Clé Sealed Secrets active (KEY_BACKUP de bootstrap-platform.sh). Sans elle, les SealedSecrets du dépôt ne sont plus déchiffrables.
+sealed-key-active	BLOCK	covered	${LAB_CONFIG_DIR}/sealed-secrets-keyx9rjr-2026-09-29.yaml	Sauvegarde de clé validée localement	Clé Sealed Secrets active (KEY_BACKUP de scripts/lab-recovery.sh). Sans elle, les SealedSecrets du dépôt ne sont plus déchiffrables.
 argocd-manifest	BLOCK	covered	${LAB_CONFIG_DIR}/pra-isolated/argocd-v3.5.3-install.yaml	Manifeste Argo CD vérifié avant le menu PRA	Manifeste Argo CD épinglé (SHA-256 écrit en dur dans le bootstrap). Le nom du dossier pra-isolated est un héritage : à revoir en v1.4.0.
 ca-cert	BLOCK	covered	${LAB_CONFIG_DIR}/gitops-lab-root-ca.crt	Paire CA locale validée avant destruction	Certificat de la CA privée du lab ; le PRA recrée le Secret gitops-lab-root-ca à partir de la paire.
 ca-key	BLOCK	covered	${LAB_CONFIG_DIR}/gitops-lab-root-ca.key	Paire CA locale validée avant destruction	Clé privée de la CA. Sa perte impose une nouvelle CA et la réémission de tous les certificats.
-argocd-admin-hash	BLOCK	covered	${LAB_CONFIG_DIR}/argocd-admin-password.bcrypt	Hash administrateur Argo CD controle avant destruction	Hash bcrypt du compte admin Argo CD, lu par bootstrap-management.sh et bootstrap-platform.sh.
+argocd-admin-hash	BLOCK	covered	${LAB_CONFIG_DIR}/argocd-admin-password.bcrypt	Hash administrateur Argo CD controle avant destruction	Hash bcrypt du compte admin Argo CD, lu par scripts/bootstrap/management.sh et scripts/lab-recovery.sh.
 gitea-token	BLOCK	covered	${LAB_CONFIG_DIR}/gitea-git-token	Fichier de jeton present	Jeton Gitea git-push-wsl utilisé pour les opérations Git depuis WSL. Non réaffichable : sa perte oblige à en recréer un dans Gitea.
 gitea-repository-discovery-token	BLOCK	path	${LAB_CONFIG_DIR}/gitea-repository-discovery.token	600	Jeton Gitea en lecture seule avec la portée read:organization, utilisé par le prévol pour détecter les dépôts non inventoriés. Son absence bloque le PRA avant le menu.
 gitea-games-registry-pull-token	BLOCK	path	${LAB_CONFIG_DIR}/gitea-games-registry-pull.token	600	Jeton Gitea du compte games-puller (read:package), source du Secret games-registry-pull des workloads (v1.3.6). Jamais affiché. Sa perte oblige à en recréer un dans Gitea ; son absence bloque le PRA avant le menu.

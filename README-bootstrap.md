@@ -11,7 +11,7 @@
 
 ## Limite structurelle importante
 
-Un cluster ArgoCD neuf ne peut pas inventer seul les identifiants du cluster workload. Le premier enrôlement exige donc une racine de confiance. Ici, elle est matérialisée par un `SealedSecret` commité et par la cle privee Sealed Secrets sauvegardee hors Git. Apres cette initialisation unique, les PRA du cluster management sont automatisables par `bootstrap-management.sh`.
+Un cluster ArgoCD neuf ne peut pas inventer seul les identifiants du cluster workload. Le premier enrôlement exige donc une racine de confiance. Ici, elle est matérialisée par un `SealedSecret` commité et par la cle privee Sealed Secrets sauvegardee hors Git. Apres cette initialisation unique, les PRA du cluster management sont automatisables par `scripts/bootstrap/management.sh`.
 
 Ne commite jamais : token brut, Secret ArgoCD en clair ou cle privee Sealed Secrets.
 
@@ -26,7 +26,7 @@ Le Root App surveille maintenant tout `argocd/` avec `directory.recurse: true`. 
 1. Installer ArgoCD et appliquer le Root App :
 
 ```bash
-./scripts/bootstrap-management.sh
+./scripts/bootstrap/management.sh
 ```
 
 2. Attendre que `sealed-secrets` soit Healthy, puis generer le manifeste chiffre :
@@ -48,7 +48,7 @@ git push
 
 ```bash
 kind create cluster --name gitops-management --config clusters/management/kind-config.yaml
-SEALED_KEYS="$HOME/.config/lab/sealed-secrets-key.yaml" ./scripts/bootstrap-management.sh
+SEALED_KEYS="$HOME/.config/lab/sealed-secrets-key.yaml" ./scripts/bootstrap/management.sh
 ```
 
 Le Root App recrée ensuite les projets, l'enregistrement du workload et les Applications.
@@ -66,7 +66,7 @@ kubectl --context kind-gitops-management get secret -n sealed-secrets \
 
 ## Points a adapter
 
-- Verifier la version ArgoCD fixee dans `bootstrap-management.sh` avant emploi.
+- Verifier la version ArgoCD fixee dans `scripts/bootstrap/management.sh` avant emploi.
 - Verifier la version Helm de Sealed Secrets.
 - Si le nom du conteneur Kind workload differe, adapter `SERVER`.
 - Pour davantage de moindre privilege, remplacer `cluster-admin` par des roles limites aux namespaces et ressources geres.

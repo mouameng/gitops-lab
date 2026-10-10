@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/../lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPTS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+ROOT_DIR="$(cd -- "$SCRIPTS_DIR/.." && pwd -P)"
 
 CLUSTER_NAME="${CLUSTER_NAME:?Définir CLUSTER_NAME explicitement}"
 ARGOCD_NAMESPACE="argocd"

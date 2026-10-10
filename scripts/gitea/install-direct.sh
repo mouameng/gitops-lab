@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Installation directe de Gitea (helm template + kubectl apply).
-# A executer APRES restore-gitea.sh. Source unique : argocd/applications/gitea.yaml.
+# A executer APRES scripts/gitea/restore.sh. Source unique : argocd/applications/gitea.yaml.
 # --render-check : outils, source et rendu uniquement, SANS acces au cluster (prevol).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPTS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+ROOT_DIR="$(cd -- "$SCRIPTS_DIR/.." && pwd -P)"
 CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}"
 NS="gitea"
 APP_FILE="$ROOT_DIR/argocd/applications/gitea.yaml"
@@ -79,7 +80,7 @@ fi
 blocked=0
 
 if ! k get namespace "$NS" -o name >/dev/null 2>&1; then
-    echo "[STOP] Namespace $NS absent (restore-gitea.sh non execute ?)" >&2
+    echo "[STOP] Namespace $NS absent (scripts/gitea/restore.sh non execute ?)" >&2
     blocked=1
 fi
 

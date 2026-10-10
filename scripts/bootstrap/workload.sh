@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/../lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 MGMT_CONTEXT="${MGMT_CONTEXT:?Definir MGMT_CONTEXT explicitement}"
 KIND_CLUSTER="${KIND_CLUSTER:?Définir KIND_CLUSTER explicitement}"
@@ -16,7 +16,10 @@ SA_NAME="argocd-manager"
 OUTPUT="${OUTPUT:?Definir OUTPUT explicitement}"
 
 # Vérifier le couple dans l'inventaire avant toute action Kubernetes.
-INVENTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/clusters/workloads.tsv"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPTS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+ROOT_DIR="$(cd -- "$SCRIPTS_DIR/.." && pwd -P)"
+INVENTORY="${ROOT_DIR}/clusters/workloads.tsv"
 if [[ ! -f "$INVENTORY" ]] ||
    ! awk -F '\t' -v kind="$KIND_CLUSTER" -v argo="$ARGOCD_CLUSTER" '
      NR > 1 && $2 == kind && $3 == argo { found = 1 }

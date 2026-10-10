@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
-. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/../lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 BACKUP_DIR="${GITEA_BACKUP_DIR:-${LAB_GITEA_BACKUP_DIR}}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-READER_MANIFEST="$SCRIPT_DIR/manifests/gitea-backup-reader.yaml"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPTS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+READER_MANIFEST="$SCRIPTS_DIR/manifests/gitea-backup-reader.yaml"
 
 validate_game() {
     local dir="$1"

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/../lib/lab-paths.sh" || { echo "[ERREUR] lab-paths.sh illisible" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_SCRIPT="$SCRIPT_DIR/backup-gitea.sh"
+BACKUP_SCRIPT="$SCRIPT_DIR/backup.sh"
 
 restore_admin_secret() {
     local backup_dir secret_file

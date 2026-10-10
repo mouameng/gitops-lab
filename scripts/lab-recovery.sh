@@ -61,15 +61,15 @@ if [[ "${1:-}" == "--plan" && "$#" -eq 1 ]]; then
         }
     done < "$inventory"
 
-    test -x "$root/scripts/configure-workload-registry.sh" || {
-        echo "[STOP] Script absent ou non exécutable : scripts/configure-workload-registry.sh"
+    test -x "$root/scripts/config/workload-registry.sh" || {
+        echo "[STOP] Script absent ou non exécutable : scripts/config/workload-registry.sh"
         exit 1
     }
     echo "[PLAN] kind create cluster --name gitops-management --config clusters/management/kind-config.yaml"
     awk -F '\t' 'NR > 1 {
         printf "[PLAN] kind create cluster --name %s --config clusters/workload-%s/kind-config.yaml\n", $2, $1
     }' "$inventory"
-    echo "[PLAN] bash scripts/configure-workload-registry.sh (gitea.local, CA et hosts.toml sur les nœuds workload)"
+    echo "[PLAN] bash scripts/config/workload-registry.sh (gitea.local, CA et hosts.toml sur les nœuds workload)"
     echo "[PLAN] bash scripts/ensure-games-pull-secret.sh --apply (namespace game-2048 et Secret games-registry-pull sur les workloads)"
     echo "[OK] Plan affiché ; aucune action Kubernetes ou Docker exécutée"
     exit 0
@@ -102,8 +102,8 @@ KEY_BACKUP="${KEY_BACKUP:-${LAB_CONFIG_DIR}/sealed-secrets-keyx9rjr-2026-09-29.y
 
 # Accès au registre Gitea : refuser AVANT toute destruction si le patch containerd
 # ou le script d'accès manque (sinon l'échec surviendrait après la recréation).
-[[ -x "${ROOT_DIR}/scripts/configure-workload-registry.sh" ]] || {
-    echo "[STOP] Script absent ou non exécutable : scripts/configure-workload-registry.sh" >&2
+[[ -x "${ROOT_DIR}/scripts/config/workload-registry.sh" ]] || {
+    echo "[STOP] Script absent ou non exécutable : scripts/config/workload-registry.sh" >&2
     exit 1
 }
 while IFS=$'\t' read -r -u 3 environment _kind_cluster _argocd_cluster; do
@@ -282,8 +282,8 @@ remote_head="$(git -C "$ROOT_DIR" ls-remote gitea refs/heads/main | cut -f1)"
     exit 1
 }
 echo "[OK] Branche main alignée avec le dépôt distant"
-MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea-publish.sh" --check
-MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/install-gitea-direct.sh" --render-check
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea/publish.sh" --check
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea/install-direct.sh" --render-check
 
 # Dépôt de secours GitHub : contrôle seul (aucune écriture, aucune question).
 # La décision (profil lab / exploit) est prise plus bas, après confirmation du PRA.
@@ -374,7 +374,7 @@ echo "[OK] Jeton et lecture du registre games conformes"
 
 # DNS du cluster management : contrôle du rendu seul, sans accès au cluster
 # (script présent, outils, transformation du Corefile de référence).
-MGMT_DNS_SCRIPT="${ROOT_DIR}/scripts/configure-management-dns.sh"
+MGMT_DNS_SCRIPT="${ROOT_DIR}/scripts/config/management-dns.sh"
 [[ -f "$MGMT_DNS_SCRIPT" && -x "$MGMT_DNS_SCRIPT" ]] || {
     echo "[STOP] Script absent ou non exécutable : $MGMT_DNS_SCRIPT" >&2
     exit 1
@@ -414,7 +414,7 @@ for tool in argocd mktemp; do
     }
 done
 
-for script in backup-gitea.sh restore-gitea.sh; do
+for script in gitea/backup.sh gitea/restore.sh; do
     path="${ROOT_DIR}/scripts/$script"
     [[ -f "$path" && ! -L "$path" ]] || {
         echo "[STOP] Script absent ou invalide : $script" >&2
@@ -561,7 +561,7 @@ if ((mirror_status != 0)); then
 fi
 
 # Choisir et figer le jeu Gitea avant toute destruction.
-GITEA_BACKUP_SCRIPT="${ROOT_DIR}/scripts/backup-gitea.sh"
+GITEA_BACKUP_SCRIPT="${ROOT_DIR}/scripts/gitea/backup.sh"
 
 if grep -Fxq -- gitops-management <<< "$existing_clusters"; then
     echo "[INFO] Sauvegarde Git fraiche des depots inventories avant destruction"
@@ -669,7 +669,7 @@ done < "$INVENTORY"
 
 # Accès des nœuds workload au registre Gitea (résolution, CA, hosts.toml).
 # Une seule fois, après création de tous les workloads ; rejouable seul.
-bash "${ROOT_DIR}/scripts/configure-workload-registry.sh"
+bash "${ROOT_DIR}/scripts/config/workload-registry.sh"
 
 # v1.3.6 : Secret de lecture du registre games (jeton games-puller) sur les workloads.
 # Les clusters existent, Argo CD n'a encore rien déployé. Le namespace game-2048 est créé
@@ -679,16 +679,16 @@ bash "${ROOT_DIR}/scripts/ensure-games-pull-secret.sh" --apply
 # DNS du cluster management : gitea.local -> Service Traefik pour les pods, le DinD et les jobs CI.
 # Le Corefile par défaut de Kind est recréé avec le cluster : l'entrée est donc rejouée à chaque PRA.
 # Un échec n'arrête pas la reconstruction (le DNS ne sert qu'à la CI) ; rejouable seul.
-if MGMT_CONTEXT=kind-gitops-management bash "${ROOT_DIR}/scripts/configure-management-dns.sh" --apply; then
+if MGMT_CONTEXT=kind-gitops-management bash "${ROOT_DIR}/scripts/config/management-dns.sh" --apply; then
     echo "[OK] DNS du management : gitea.local -> Service Traefik"
 else
-    echo "[WARN] DNS du management non appliqué ; rejouer : bash scripts/configure-management-dns.sh --apply" >&2
+    echo "[WARN] DNS du management non appliqué ; rejouer : bash scripts/config/management-dns.sh --apply" >&2
 fi
 
 # Installer Argo CD sur le management recréé, sans activer la Root App.
 CLUSTER_NAME=gitops-management \
 ARGOCD_MANIFEST="${LAB_PRA_ISOLATED_DIR}/argocd-v3.5.3-install.yaml" \
-    bash "${ROOT_DIR}/scripts/bootstrap-management.sh"
+    bash "${ROOT_DIR}/scripts/bootstrap/management.sh"
 
 # À exécuter uniquement après création du management neuf.
 MGMT_CONTEXT="kind-gitops-management"
@@ -847,7 +847,7 @@ while IFS=$'\t' read -r environment kind_cluster argocd_cluster; do
     KIND_CLUSTER="$kind_cluster" \
     ARGOCD_CLUSTER="$argocd_cluster" \
     OUTPUT="${candidate_dir}/${argocd_cluster}-sealedsecret.yaml" \
-        bash "${ROOT_DIR}/scripts/bootstrap-workload.sh"
+        bash "${ROOT_DIR}/scripts/bootstrap/workload.sh"
 done < "$INVENTORY"
 
 MGMT_CONTEXT="$MGMT_CONTEXT" \
@@ -858,18 +858,18 @@ CANDIDATE_DIR="$candidate_dir" \
 # AVANT le commit des enregistrements et AVANT cluster-registration / Root App.
 echo "[INFO] Restauration Gitea avant activation de la Root App"
 
-bash "${ROOT_DIR}/scripts/restore-gitea.sh" \
+bash "${ROOT_DIR}/scripts/gitea/restore.sh" \
     --preflight "$GITEA_GAME"
 
-bash "${ROOT_DIR}/scripts/restore-gitea.sh" \
+bash "${ROOT_DIR}/scripts/gitea/restore.sh" \
     --restore "$GITEA_GAME"
 
 echo "[OK] Donnees Gitea restaurees avant la Root App"
 
 # Installation directe de Gitea (helm template + kubectl apply) ; Argo CD
 # reprend la main a la synchronisation de l'Application gitea.
-MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/install-gitea-direct.sh" --preflight
-MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/install-gitea-direct.sh" --install
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea/install-direct.sh" --preflight
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea/install-direct.sh" --install
 echo "[OK] Gitea installe directement et pret avant la publication"
 
 # Publication PRA : chemins derives exclusivement de l'inventaire valide.
@@ -967,9 +967,9 @@ echo "[OK] Index Git limité aux enregistrements modifiés de l'inventaire"
 git -C "$ROOT_DIR" commit -m "chore(pra): renew workload registrations"
 published_head="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 
-MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea-publish.sh" --push "$published_head"
+MGMT_CONTEXT="${MGMT_CONTEXT:-kind-gitops-management}" bash "${ROOT_DIR}/scripts/gitea/publish.sh" --push "$published_head"
 
-actual_remote_head="$published_head"  # main distant relu et compare par gitea-publish.sh apres le push
+actual_remote_head="$published_head"  # main distant relu et compare par scripts/gitea/publish.sh apres le push
 if [[ "$actual_remote_head" != "$published_head" ]]; then
     echo "[STOP] La révision distante ne correspond pas au commit PRA" >&2
     exit 1
